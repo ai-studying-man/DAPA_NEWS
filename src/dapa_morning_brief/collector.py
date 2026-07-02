@@ -47,7 +47,9 @@ def collect_articles(
         if include_google or only_google:
             collected.extend(_collect_google_by_section(client, days=days, now=now))
         if not collected:
-            collected.extend(_collect_google_query(client, BROAD_FALLBACK_QUERY, days, now))
+            collected.extend(
+                _collect_google_query(client, BROAD_FALLBACK_QUERY, days, now),
+            )
         if not collected:
             for keyword in SINGLE_FALLBACK_KEYWORDS:
                 collected.extend(_collect_google_query(client, keyword, days, now))
@@ -57,9 +59,9 @@ def collect_articles(
     return collected
 
 
-def build_google_news_rss_url(query: str) -> str:
+def build_google_news_rss_url(query: str, *, days: int = 1) -> str:
     """Build a Korean Google News RSS search URL."""
-    encoded = quote_plus(f"({query}) when:7d")
+    encoded = quote_plus(f"({query}) when:{days}d")
     return (
         "https://news.google.com/rss/search"
         f"?q={encoded}&hl=ko&gl=KR&ceid=KR:ko"
@@ -111,14 +113,14 @@ def _collect_google_query(
     *,
     section: Section | None = None,
 ) -> list[Article]:
-    url = build_google_news_rss_url(query)
+    url = build_google_news_rss_url(query, days=days)
     try:
         response = client.get(url)
         response.raise_for_status()
         return parse_rss_items(
             response.text,
             source_name="Google News",
-            default_section=section,
+            default_section=None,
             days=days,
             now=now,
         )

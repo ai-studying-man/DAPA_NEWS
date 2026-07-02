@@ -7,7 +7,19 @@ from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 
 from dapa_morning_brief.models import Article, Section
-from dapa_morning_brief.sources import RELEVANT_KEYWORDS
+from dapa_morning_brief.sources import (
+    DEFENSE_BUSINESS_KEYWORDS,
+    DEFENSE_ANCHOR_KEYWORDS,
+    DEFENSE_CONTEXT_KEYWORDS,
+    EXCLUDE_KEYWORDS,
+    FOREIGN_CONTEXT_KEYWORDS,
+    GENERIC_WEAPON_KEYWORDS,
+    GOVERNMENT_ACTOR_KEYWORDS,
+    KOREA_ANCHOR_KEYWORDS,
+    POLICY_KEYWORDS,
+    RELEVANT_KEYWORDS,
+    WEAPON_SYSTEM_KEYWORDS,
+)
 
 
 def parse_rss_items(
@@ -26,8 +38,8 @@ def parse_rss_items(
     for item in root.findall(".//item"):
         title = _text(item, "title")
         link = _text(item, "link")
-        published_at = _parse_date(_text(item, "pubDate"), now)
-        if not title or not link or published_at < cutoff:
+        published_at = _parse_date(_text(item, "pubDate"))
+        if not title or not link or published_at is None or published_at < cutoff:
             continue
         if not is_relevant_title(title):
             continue
@@ -53,84 +65,62 @@ def parse_rss_items(
 def classify_title(title: str) -> Section:
     """Classify an article title into the closest newsletter section."""
     text = title.casefold()
+    if _contains_any(text, EXCLUDE_KEYWORDS):
+        return Section.POLICY
     if _is_current_government_news(text):
         return Section.GOVERNMENT
-    if _contains_any(
-        text,
-        (
-            "방산수출",
-            "k방산",
-            "방산기업",
-            "방위산업",
-            "방산계약",
-            "절충교역",
-            "한화에어로",
-            "lig",
-            "현대로템",
-            "한국항공우주",
-            "kai",
-            "풍산",
-        ),
-    ):
-        return Section.EXPORT_BUSINESS
-    if _contains_any(
-        text,
-        (
-            "무기",
-            "전력화",
-            "체계개발",
-            "양산사업",
-            "후속양산",
-            "최초양산",
-            "시험평가",
-            "kf-21",
-            "미사일",
-            "전투기",
-            "함정",
-        ),
-    ):
+    if _is_weapon_system_news(text):
         return Section.WEAPON_SYSTEM
+    if _contains_any(text, DEFENSE_BUSINESS_KEYWORDS):
+        return Section.EXPORT_BUSINESS
     return Section.POLICY
 
 
 def is_relevant_title(title: str) -> bool:
     """Return whether a title is relevant enough for DAPA morning brief."""
     text = title.casefold()
-    return _contains_any(text, RELEVANT_KEYWORDS)
+    if _contains_any(text, EXCLUDE_KEYWORDS):
+        return False
+    if _contains_any(text, FOREIGN_CONTEXT_KEYWORDS) and not _contains_any(
+        text,
+        KOREA_ANCHOR_KEYWORDS,
+    ):
+        return False
+    if _is_current_government_news(text):
+        return True
+    if _contains_any(text, POLICY_KEYWORDS):
+        return True
+    if _is_weapon_system_news(text):
+        return True
+    return _contains_any(text, DEFENSE_BUSINESS_KEYWORDS)
 
 
 def _is_current_government_news(text: str) -> bool:
-    government_actor_terms = (
-        "이재명 대통령",
-        "이 대통령",
-        "국방부 장관",
-        "국방장관",
-        "합참의장",
-        "육군참모총장",
-        "해군참모총장",
-        "공군참모총장",
-    )
-    defense_terms = (
-        "방위사업",
-        "방산",
-        "방위산업",
-        "방산수출",
-        "국방",
-        "자주국방",
-        "무기체계",
-        "전력화",
-        "k방산",
-        "획득",
-        "방위력개선",
-        "국방예산",
-        "핵잠수함",
-        "무인기",
-        "드론",
-    )
-    return _contains_any(text, government_actor_terms) and _contains_any(
+    return _contains_any(text, GOVERNMENT_ACTOR_KEYWORDS) and _contains_any(
         text,
-        defense_terms,
+        DEFENSE_CONTEXT_KEYWORDS,
     )
+
+
+def _is_weapon_system_news(text: str) -> bool:
+    if not _contains_any(text, WEAPON_SYSTEM_KEYWORDS):
+        return False
+    specific_weapon_keywords = tuple(
+        keyword
+        for keyword in WEAPON_SYSTEM_KEYWORDS
+        if keyword not in GENERIC_WEAPON_KEYWORDS
+    )
+    if _contains_any(text, specific_weapon_keywords) and (
+        _contains_any(text, KOREA_ANCHOR_KEYWORDS)
+        or _contains_any(text, DEFENSE_BUSINESS_KEYWORDS)
+    ):
+        return True
+    if _contains_any(text, GENERIC_WEAPON_KEYWORDS):
+        return _contains_any(text, DEFENSE_ANCHOR_KEYWORDS) or _contains_any(
+            text,
+            DEFENSE_BUSINESS_KEYWORDS,
+        )
+    return True
 
 
 def _text(item: ET.Element, name: str) -> str:
@@ -147,9 +137,9 @@ def _source_from_item(item: ET.Element) -> str:
     return ""
 
 
-def _parse_date(raw: str, fallback: datetime) -> datetime:
+def _parse_date(raw: str) -> datetime | None:
     if not raw:
-        return fallback
+        return None
     parsed = email.utils.parsedate_to_datetime(raw)
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)

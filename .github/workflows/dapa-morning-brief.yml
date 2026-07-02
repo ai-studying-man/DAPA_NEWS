@@ -52,7 +52,7 @@ jobs:
           key: dapa-morning-brief-${{ steps.kst-date.outputs.today }}
       - name: Send Telegram brief
         if: github.event_name == 'workflow_dispatch' || (steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true')
-        run: uv run python -m dapa_morning_brief.cli --days 3 --fallback-days 5
+        run: uv run python -m dapa_morning_brief.cli --days 1 --fallback-days 2
       - name: Mark scheduled brief sent
         if: github.event_name != 'workflow_dispatch' && steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true' && success()
         run: |

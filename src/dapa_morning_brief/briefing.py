@@ -28,6 +28,7 @@ TOPIC_KEYWORDS: Final[tuple[str, ...]] = (
     "방산혁신클러스터",
     "미르온",
     "KF-21",
+    "KDDX",
     "L-SAM",
     "M-SAM",
     "K9",

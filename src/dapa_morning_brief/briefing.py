@@ -1,12 +1,16 @@
+"""Build and render a deduplicated DAPA morning briefing."""
+
 from __future__ import annotations
 
 import html
-import re
-from collections.abc import Iterable
-from datetime import date
-from typing import Final, assert_never
+from typing import TYPE_CHECKING, Final
 
 from dapa_morning_brief.models import Article, Briefing, Section
+from dapa_morning_brief.story_deduplication import are_same_story
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+    from datetime import date
 
 SECTION_ORDER: Final[tuple[Section, ...]] = (
     Section.GOVERNMENT,
@@ -24,39 +28,6 @@ SOURCE_PRIORITY: Final[tuple[str, ...]] = (
     "네이버",
     "Google",
 )
-
-TOPIC_KEYWORDS: Final[tuple[str, ...]] = (
-    "방산혁신클러스터",
-    "미르온",
-    "KF-21",
-    "KDDX",
-    "L-SAM",
-    "M-SAM",
-    "K9",
-    "K2",
-    "천궁",
-    "핵잠수함",
-    "전작권",
-    "한화에어로스페이스",
-    "LIG넥스원",
-    "현대로템",
-    "한국항공우주",
-)
-
-LOW_SIGNAL_TITLE_TOKENS: Final[frozenset[str]] = frozenset(
-    {
-        "관련",
-        "논의",
-        "발표",
-        "사진",
-        "속보",
-        "종합",
-        "단독",
-        "하는",
-    },
-)
-DEDUPE_MIN_TOKEN_COUNT: Final = 2
-TOKEN_SUFFIX_MIN_LENGTH: Final = 3
 
 MORNING_QUOTES: Final[tuple[str, ...]] = (
     "대한민국 안보는 정확한 정보에서 시작됩니다.",
@@ -76,10 +47,9 @@ def build_briefing(
 ) -> Briefing:
     """Select newest non-duplicate articles for each section."""
     buckets: dict[Section, list[Article]] = {section: [] for section in SECTION_ORDER}
-    global_seen_topics: set[str] = set()
+    selected_articles: list[Article] = []
 
     for section in SECTION_ORDER:
-        seen_topics: set[str] = set()
         candidates = sorted(
             (article for article in articles if article.section == section),
             key=lambda article: (
@@ -88,12 +58,13 @@ def build_briefing(
             ),
         )
         for article in candidates:
-            topic = _dedupe_key(article.title)
-            if topic in seen_topics or topic in global_seen_topics:
+            if any(
+                are_same_story(article.title, selected.title)
+                for selected in selected_articles
+            ):
                 continue
-            seen_topics.add(topic)
-            global_seen_topics.add(topic)
             buckets[section].append(article)
+            selected_articles.append(article)
             if len(buckets[section]) >= max_per_section:
                 break
 
@@ -165,8 +136,6 @@ def _section_heading(section: Section) -> str:
             return f"⚙️ {section.title}"
         case Section.EXPORT_BUSINESS:
             return f"🌏 {section.title}"
-        case unreachable:
-            assert_never(unreachable)
 
 
 def _practice_point(section: Section) -> str:
@@ -179,8 +148,6 @@ def _practice_point(section: Section) -> str:
             return "체계개발, 시험평가, 양산 일정 변동 여부 확인 필요."
         case Section.EXPORT_BUSINESS:
             return "수출 계약, 공급망, 업체별 사업 영향 확인 필요."
-        case unreachable:
-            assert_never(unreachable)
 
 
 def _source_rank(source: str) -> int:
@@ -188,42 +155,3 @@ def _source_rank(source: str) -> int:
         if keyword in source:
             return index
     return len(SOURCE_PRIORITY)
-
-
-def _normalize_title(title: str) -> str:
-    return re.sub(r"\s+", "", title).casefold()
-
-
-def _dedupe_key(title: str) -> str:
-    normalized = _normalize_title(title)
-    if ("공격헬기" in normalized or "미르온" in normalized) and "엔진" in normalized:
-        return "topic:공격헬기엔진"
-    if "대드론" in normalized and "요격" in normalized:
-        return "topic:대드론요격"
-    for keyword in TOPIC_KEYWORDS:
-        if _normalize_title(keyword) in normalized:
-            return f"topic:{_normalize_title(keyword)}"
-    tokens = _title_tokens(title)
-    if len(tokens) >= DEDUPE_MIN_TOKEN_COUNT:
-        return f"tokens:{'|'.join(sorted(tokens))}"
-    return normalized
-
-
-def _title_tokens(title: str) -> frozenset[str]:
-    source_stripped = re.sub(r"\s+-\s+[^-]+$", "", title)
-    raw_tokens = re.findall(r"[0-9A-Za-z가-힣]+", source_stripped.casefold())
-    tokens: set[str] = set()
-    for raw_token in raw_tokens:
-        token = _compact_title_token(raw_token)
-        if token and token not in LOW_SIGNAL_TITLE_TOKENS:
-            tokens.add(token)
-    return frozenset(tokens)
-
-
-def _compact_title_token(token: str) -> str:
-    compacted = token.strip()
-    if compacted.endswith("하는") and len(compacted) > TOKEN_SUFFIX_MIN_LENGTH:
-        compacted = compacted.removesuffix("하는")
-    if compacted.endswith("했다") and len(compacted) > TOKEN_SUFFIX_MIN_LENGTH:
-        compacted = compacted.removesuffix("했다")
-    return compacted

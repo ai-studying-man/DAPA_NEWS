@@ -31,7 +31,7 @@ jobs:
       - id: kst-date
         run: echo "today=$(TZ=Asia/Seoul date +%F)" >> "$GITHUB_OUTPUT"
       - id: send-window
-        if: github.event_name != 'workflow_dispatch'
+        if: github.event_name == 'schedule'
         run: |
           now_epoch=$(TZ=Asia/Seoul date +%s)
           target_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 06:30:00" +%s)
@@ -45,20 +45,20 @@ jobs:
           fi
           echo "should_send=true" >> "$GITHUB_OUTPUT"
       - id: sent-cache
-        if: github.event_name != 'workflow_dispatch'
+        if: github.event_name == 'schedule'
         uses: actions/cache/restore@v4
         with:
           path: .dapa-sent
           key: dapa-morning-brief-${{ steps.kst-date.outputs.today }}
       - name: Send Telegram brief
-        if: github.event_name == 'workflow_dispatch' || (steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true')
+        if: github.event_name != 'schedule' || (steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true')
         run: uv run python -m dapa_morning_brief.cli --days 1 --fallback-days 2
       - name: Mark scheduled brief sent
-        if: github.event_name != 'workflow_dispatch' && steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true' && success()
+        if: github.event_name == 'schedule' && steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true' && success()
         run: |
           mkdir -p .dapa-sent
           echo "${{ steps.kst-date.outputs.today }}" > ".dapa-sent/${{ steps.kst-date.outputs.today }}"
-      - if: github.event_name != 'workflow_dispatch' && steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true' && success()
+      - if: github.event_name == 'schedule' && steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true' && success()
         uses: actions/cache/save@v4
         with:
           path: .dapa-sent

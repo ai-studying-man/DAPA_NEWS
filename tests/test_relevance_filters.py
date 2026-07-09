@@ -32,6 +32,92 @@ class RelevanceFilterTest(TestCase):
         # Then
         assert section == Section.GOVERNMENT
 
+    def test_defense_ai_news_is_classified_as_policy(self) -> None:
+        # Given
+        title = "국방부, AI 기반 무인화 전력 운용 확대"
+
+        # When
+        is_relevant = is_relevant_title(title)
+        section = classify_title(title)
+
+        # Then
+        assert is_relevant is True
+        assert section == Section.POLICY
+
+    def test_ai_news_without_defense_context_is_rejected(self) -> None:
+        # Given
+        title = "AI 산업 투자 확대에 국내 기업 관심 집중"
+
+        # When
+        is_relevant = is_relevant_title(title)
+
+        # Then
+        assert is_relevant is False
+
+    def test_ai_drone_news_without_defense_anchor_is_rejected(self) -> None:
+        # Given
+        title = "영진전문대, AI항공드론과 신설"
+
+        # When
+        is_relevant = is_relevant_title(title)
+
+        # Then
+        assert is_relevant is False
+
+    def test_parse_rss_items_rejects_article_before_kst_send_window(self) -> None:
+        # Given
+        xml = """
+        <rss>
+          <channel>
+            <item>
+              <title>방위사업청, 국방획득 제도 개선</title>
+              <link>https://example.com/before-window</link>
+              <pubDate>Tue, 07 Jul 2026 21:29:00 GMT</pubDate>
+            </item>
+          </channel>
+        </rss>
+        """
+
+        # When
+        articles = parse_rss_items(
+            xml,
+            source_name="test",
+            default_section=None,
+            days=1,
+            now=datetime(2026, 7, 8, 22, 30, tzinfo=UTC),
+        )
+
+        # Then
+        assert articles == []
+
+    def test_parse_rss_items_accepts_article_after_kst_send_window(self) -> None:
+        # Given
+        xml = """
+        <rss>
+          <channel>
+            <item>
+              <title>방위사업청, 국방획득 제도 개선</title>
+              <link>https://example.com/after-window</link>
+              <pubDate>Tue, 07 Jul 2026 21:31:00 GMT</pubDate>
+            </item>
+          </channel>
+        </rss>
+        """
+
+        # When
+        articles = parse_rss_items(
+            xml,
+            source_name="test",
+            default_section=None,
+            days=1,
+            now=datetime(2026, 7, 8, 22, 30, tzinfo=UTC),
+        )
+
+        # Then
+        assert [article.url for article in articles] == [
+            "https://example.com/after-window",
+        ]
+
     def test_parse_rss_items_rejects_missing_pub_date(self) -> None:
         # Given
         xml = """

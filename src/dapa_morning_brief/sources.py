@@ -75,6 +75,14 @@ GENERIC_WEAPON_KEYWORDS: Final[tuple[str, ...]] = (
     "우주",
 )
 
+DEFENSE_TECH_KEYWORDS: Final[tuple[str, ...]] = (
+    "AI",
+    "인공지능",
+    "무인화",
+    "무인체계",
+    "유무인복합",
+)
+
 DEFENSE_ANCHOR_KEYWORDS: Final[tuple[str, ...]] = (
     *POLICY_KEYWORDS,
     "국방부",
@@ -187,7 +195,10 @@ SECTION_QUERIES: Final[dict[Section, str]] = {
     Section.POLICY: (
         '"방위사업청" OR "방사청" OR "방위사업" OR "방위력개선" '
         'OR "국방획득" OR "국방조달" OR "방위사업법" OR "국방예산" '
-        'OR "국방정책" OR "선행연구" OR "탐색개발"'
+        'OR "국방정책" OR "선행연구" OR "탐색개발" '
+        'OR "국방부" "AI" OR "국방부" "무인화" '
+        'OR "방산" "AI" OR "방산" "무인화" '
+        'OR "방위사업" "AI" OR "방위사업" "무인화"'
     ),
     Section.WEAPON_SYSTEM: (
         '"무기체계" OR "전력화" OR "체계개발" OR "양산사업" '
@@ -205,7 +216,8 @@ SECTION_QUERIES: Final[dict[Section, str]] = {
 
 BROAD_FALLBACK_QUERY: Final[str] = (
     '"방위사업청" OR "방사청" OR "방위사업" OR "무기체계" '
-    'OR "방산수출" OR "K방산" OR "K-방산"'
+    'OR "방산수출" OR "K방산" OR "K-방산" '
+    'OR "국방부" "AI" OR "방산" "무인화"'
 )
 SINGLE_FALLBACK_KEYWORDS: Final[tuple[str, ...]] = (
     "방위사업청",

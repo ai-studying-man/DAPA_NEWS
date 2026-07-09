@@ -5,6 +5,7 @@ import os
 import sys
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import Final
 
 from dapa_morning_brief.briefing import build_briefing, format_telegram_message
 from dapa_morning_brief.collector import collect_articles
@@ -13,6 +14,9 @@ from dapa_morning_brief.telegram import (
     parse_chat_ids,
     send_telegram_messages,
 )
+
+DEFAULT_DAYS: Final = 1
+DEFAULT_FALLBACK_DAYS: Final = 2
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -67,8 +71,8 @@ def _parser() -> argparse.ArgumentParser:
         prog="dapa-morning-brief",
         description="Collect DAPA-related news and send a Telegram morning brief.",
     )
-    parser.add_argument("--days", type=int, default=3)
-    parser.add_argument("--fallback-days", type=int, default=5)
+    parser.add_argument("--days", type=int, default=DEFAULT_DAYS)
+    parser.add_argument("--fallback-days", type=int, default=DEFAULT_FALLBACK_DAYS)
     parser.add_argument("--max-per-section", type=int, default=3)
     parser.add_argument("--include-google", action="store_true", default=True)
     parser.add_argument("--google-only", action="store_true")

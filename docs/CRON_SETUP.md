@@ -95,7 +95,7 @@ Hermes Cronjob에는 다음 형태로 등록합니다.
 ```text
 이름: 방산출근길 뉴스레터
 스케줄: 매일 06:30 Asia/Seoul
-명령: uv run dapa-morning-brief --days 3 --fallback-days 5
+명령: uv run dapa-morning-brief --days 1 --fallback-days 2
 전달: Telegram Bot API
 환경변수: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TZ=Asia/Seoul
 ```

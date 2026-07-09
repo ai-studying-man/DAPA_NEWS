@@ -50,6 +50,41 @@ class BriefingTest(TestCase):
             len(policy_articles),
         )
 
+    def test_build_briefing_keeps_first_similar_title_only(self) -> None:
+        # Given
+        published = datetime(2026, 7, 9, 6, 0, tzinfo=timezone.utc)
+        articles = [
+            Article(
+                title="개회사하는 이용철 방위사업청장 - 네이트",
+                url="https://example.com/first",
+                published_at=published,
+                source="네이트",
+                section=Section.POLICY,
+            ),
+            Article(
+                title="개회사 하는 이용철 방위사업청장 - 연합뉴스",
+                url="https://example.com/second",
+                published_at=published,
+                source="연합뉴스",
+                section=Section.POLICY,
+            ),
+            Article(
+                title="이용철 방위사업청장, 개회사 - 네이트",
+                url="https://example.com/third",
+                published_at=published,
+                source="네이트",
+                section=Section.POLICY,
+            ),
+        ]
+
+        # When
+        briefing = build_briefing(articles, max_per_section=3)
+
+        # Then
+        policy_articles = briefing.sections[Section.POLICY]
+        self.assertEqual(1, len(policy_articles))
+        self.assertEqual("https://example.com/first", policy_articles[0].url)
+
     def test_format_telegram_message_contains_new_headline_and_sections(self) -> None:
         # Given
         published = datetime(2026, 6, 14, 6, 0, tzinfo=timezone.utc)
@@ -77,9 +112,12 @@ class BriefingTest(TestCase):
         self.assertIn("현 정부 주요 뉴스 : 오늘은 관련 내용 없음", message)
         self.assertIn("방위사업 관련 동향", message)
         self.assertIn("무기체계·전력화", message)
-        self.assertIn("→ KF-21 후속 양산 계획 구체화", message)
+        self.assertNotIn("→ KF-21 후속 양산 계획 구체화", message)
         self.assertIn("📌 실무 참고:", message)
-        self.assertIn("🔗 https://example.com/kf21", message)
+        self.assertIn(
+            '🔗 <a href="https://example.com/kf21">뉴스 기사 링크 바로가기</a>',
+            message,
+        )
 
     def test_format_telegram_message_includes_current_government_articles(self) -> None:
         # Given
@@ -106,7 +144,42 @@ class BriefingTest(TestCase):
         # Then
         self.assertIn("현 정부 주요 뉴스", message)
         self.assertIn("1. 이재명 대통령 방산 수출 지원 확대 언급", message)
-        self.assertIn("🔗 https://example.com/president", message)
+        self.assertIn(
+            '🔗 <a href="https://example.com/president">뉴스 기사 링크 바로가기</a>',
+            message,
+        )
+
+    def test_format_telegram_message_escapes_html_in_article_fields(self) -> None:
+        # Given
+        published = datetime(2026, 7, 9, 6, 0, tzinfo=timezone.utc)
+        briefing = build_briefing(
+            [
+                Article(
+                    title='K9·원전 협력 강화 논의 <속보> & "확인"',
+                    url="https://example.com/news?a=1&b=2",
+                    published_at=published,
+                    source="뉴스",
+                    section=Section.GOVERNMENT,
+                ),
+            ],
+            max_per_section=3,
+        )
+
+        # When
+        message = format_telegram_message(
+            briefing,
+            today=datetime(2026, 7, 9, tzinfo=timezone.utc).date(),
+        )
+
+        # Then
+        self.assertIn(
+            '1. K9·원전 협력 강화 논의 &lt;속보&gt; &amp; "확인"',
+            message,
+        )
+        self.assertIn(
+            'href="https://example.com/news?a=1&amp;b=2"',
+            message,
+        )
 
     def test_format_telegram_message_rotates_daily_quote(self) -> None:
         # Given

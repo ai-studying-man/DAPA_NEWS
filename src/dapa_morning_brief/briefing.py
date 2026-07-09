@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import re
 from collections.abc import Iterable
 from datetime import date
@@ -42,6 +43,21 @@ TOPIC_KEYWORDS: Final[tuple[str, ...]] = (
     "한국항공우주",
 )
 
+LOW_SIGNAL_TITLE_TOKENS: Final[frozenset[str]] = frozenset(
+    {
+        "관련",
+        "논의",
+        "발표",
+        "사진",
+        "속보",
+        "종합",
+        "단독",
+        "하는",
+    },
+)
+DEDUPE_MIN_TOKEN_COUNT: Final = 2
+TOKEN_SUFFIX_MIN_LENGTH: Final = 3
+
 MORNING_QUOTES: Final[tuple[str, ...]] = (
     "대한민국 안보는 정확한 정보에서 시작됩니다.",
     "튼튼한 국방은 치밀한 준비에서 완성됩니다.",
@@ -69,7 +85,6 @@ def build_briefing(
             key=lambda article: (
                 _source_rank(article.source),
                 -article.published_at.timestamp(),
-                article.title,
             ),
         )
         for article in candidates:
@@ -109,10 +124,16 @@ def format_telegram_message(briefing: Briefing, *, today: date) -> str:
         for index, article in enumerate(articles, start=1):
             lines.extend(
                 [
-                    f"{index}. {article.title}",
-                    f"→ {summarize_title(article.title)}",
-                    f"📌 실무 참고: {_practice_point(section)}",
-                    f"🔗 {article.url}",
+                    f"{index}. {html.escape(article.title, quote=False)}",
+                    (
+                        "📌 실무 참고: "
+                        f"{html.escape(_practice_point(section), quote=False)}"
+                    ),
+                    (
+                        "🔗 "
+                        f'<a href="{html.escape(article.url)}">'
+                        "뉴스 기사 링크 바로가기</a>"
+                    ),
                     "",
                 ],
             )
@@ -127,15 +148,6 @@ def format_telegram_message(briefing: Briefing, *, today: date) -> str:
         ],
     )
     return "\n".join(lines).strip()
-
-
-def summarize_title(title: str) -> str:
-    """Create a short 30-40 character summary from article title metadata."""
-    cleaned = re.sub(r"\s+", " ", title).strip(" -|[]")
-    cleaned = re.sub(r"^\[[^\]]+\]\s*", "", cleaned)
-    if len(cleaned) <= 40:
-        return cleaned
-    return f"{cleaned[:37].rstrip()}..."
 
 
 def daily_quote(today: date) -> str:
@@ -191,4 +203,27 @@ def _dedupe_key(title: str) -> str:
     for keyword in TOPIC_KEYWORDS:
         if _normalize_title(keyword) in normalized:
             return f"topic:{_normalize_title(keyword)}"
+    tokens = _title_tokens(title)
+    if len(tokens) >= DEDUPE_MIN_TOKEN_COUNT:
+        return f"tokens:{'|'.join(sorted(tokens))}"
     return normalized
+
+
+def _title_tokens(title: str) -> frozenset[str]:
+    source_stripped = re.sub(r"\s+-\s+[^-]+$", "", title)
+    raw_tokens = re.findall(r"[0-9A-Za-z가-힣]+", source_stripped.casefold())
+    tokens: set[str] = set()
+    for raw_token in raw_tokens:
+        token = _compact_title_token(raw_token)
+        if token and token not in LOW_SIGNAL_TITLE_TOKENS:
+            tokens.add(token)
+    return frozenset(tokens)
+
+
+def _compact_title_token(token: str) -> str:
+    compacted = token.strip()
+    if compacted.endswith("하는") and len(compacted) > TOKEN_SUFFIX_MIN_LENGTH:
+        compacted = compacted.removesuffix("하는")
+    if compacted.endswith("했다") and len(compacted) > TOKEN_SUFFIX_MIN_LENGTH:
+        compacted = compacted.removesuffix("했다")
+    return compacted

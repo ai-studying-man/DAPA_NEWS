@@ -23,6 +23,7 @@ class TelegramPayload(TypedDict):
     chat_id: str
     text: str
     disable_web_page_preview: bool
+    parse_mode: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,3 +105,49 @@ class TelegramTest(TestCase):
         )
         assert "".join(payload["text"] for payload in sent_payloads[:2]) == text
         assert "".join(payload["text"] for payload in sent_payloads[2:]) == text
+        assert all(payload["parse_mode"] == "HTML" for payload in sent_payloads)
+
+    def test_send_telegram_messages_keeps_html_link_together_when_visible_text_fits(
+        self,
+    ) -> None:
+        # Given
+        sent_payloads: list[TelegramPayload] = []
+
+        class FakeClient:
+            def __init__(
+                self,
+                *,
+                timeout: httpx.Timeout,
+                follow_redirects: bool,
+            ) -> None:
+                self.timeout: httpx.Timeout = timeout
+                self.follow_redirects: bool = follow_redirects
+
+            def __enter__(self) -> Self:
+                return self
+
+            def __exit__(
+                self,
+                exc_type: type[BaseException] | None,
+                exc: BaseException | None,
+                traceback: TracebackType | None,
+            ) -> None:
+                return None
+
+            def post(self, _url: str, *, json: TelegramPayload) -> TelegramResponse:
+                sent_payloads.append(json.copy())
+                return TelegramResponse(status_code=200, text="")
+
+        long_url = f"https://example.com/{'x' * TELEGRAM_MESSAGE_LIMIT}"
+        text = f'기사\n🔗 <a href="{long_url}">뉴스 기사 링크 바로가기</a>'
+
+        # When
+        with patch("dapa_morning_brief.telegram.httpx.Client", FakeClient):
+            send_telegram_messages(
+                token=TEST_TELEGRAM_TOKEN,
+                chat_ids=("chat-1",),
+                text=text,
+            )
+
+        # Then
+        assert [payload["text"] for payload in sent_payloads] == [text]

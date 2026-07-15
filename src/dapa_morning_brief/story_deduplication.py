@@ -41,6 +41,11 @@ EVENT_ACTION_TOKENS: Final[frozenset[str]] = frozenset(
         "체결",
         "취소",
         "표창",
+        "조성",
+        "출범",
+        "구축",
+        "협약",
+        "업무협약",
     },
 )
 EVENT_CONTEXT_TOKEN_GROUPS: Final[tuple[frozenset[str], ...]] = (
@@ -62,6 +67,7 @@ MIN_SHARED_CONTEXT_TOKENS: Final = 2
 MIN_CONTAINMENT_RATIO: Final = 0.5
 MIN_DESCRIPTION_SHARED_TOKENS: Final = 4
 MIN_DESCRIPTION_CONTAINMENT_RATIO: Final = 0.7
+MIN_EVENT_SUBJECT_TOKEN_LENGTH: Final = 6
 MIN_TOKEN_LENGTH_FOR_PARTICLE_STRIP: Final = 4
 KOREAN_PARTICLES: Final[tuple[str, ...]] = (
     "으로",
@@ -102,6 +108,15 @@ def are_same_story(left_title: str, right_title: str) -> bool:
         return True
 
     shared_tokens = left_tokens & right_tokens
+    shares_event_subject = any(
+        len(token) >= MIN_EVENT_SUBJECT_TOKEN_LENGTH for token in shared_tokens
+    )
+    if (
+        shares_event_subject
+        and left_tokens & EVENT_ACTION_TOKENS
+        and right_tokens & EVENT_ACTION_TOKENS
+    ):
+        return True
     if len(shared_tokens) >= MIN_SHARED_CONTEXT_TOKENS and any(
         left_tokens & context_tokens and right_tokens & context_tokens
         for context_tokens in EVENT_CONTEXT_TOKEN_GROUPS
@@ -178,6 +193,7 @@ def _normalize_aliases(title: str) -> str:
     normalized = html.unescape(title).casefold()
     normalized = re.sub(r"snt\s*다이내믹스", "snt", normalized)
     normalized = re.sub(r"k\s*-\s*방산", "방산", normalized)
+    normalized = normalized.replace("방산혁신단지", "방산혁신클러스터")
     return normalized.replace("대통령표창", "대통령 표창")
 
 

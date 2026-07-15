@@ -132,6 +132,48 @@ def test_build_briefing_uses_feed_prominence_when_views_are_unavailable() -> Non
     ]
 
 
+def test_build_briefing_collapses_july_sixteen_cluster_launch_coverage() -> None:
+    # Given
+    published = datetime(2026, 7, 16, 0, 0, tzinfo=UTC)
+    articles = [
+        _article(
+            "인천 방산혁신클러스터 조성 '탄력'···엣지AI 기반 항공·우주 특화",
+            "인천투데이",
+            Section.POLICY,
+            published,
+        ),
+        _article(
+            "전국 4개 권역 방산혁신클러스터 출범",
+            "굿모닝충청",
+            Section.EXPORT_BUSINESS,
+            published,
+        ),
+        _article(
+            "전북 방산혁신클러스터 구축 본격화…K-방산 소재·부품 거점 조성",
+            "천지일보",
+            Section.EXPORT_BUSINESS,
+            published,
+        ),
+        _article(
+            "방사청, 전북·경남·충남·인천 등과 방산혁신단지 업무협약",
+            "SPN 서울평양뉴스",
+            Section.EXPORT_BUSINESS,
+            published,
+        ),
+    ]
+
+    # When
+    briefing = build_briefing(articles, max_per_section=3)
+
+    # Then
+    selected = [
+        article
+        for section_articles in briefing.sections.values()
+        for article in section_articles
+    ]
+    assert len(selected) == 1
+
+
 def test_build_briefing_collapses_july_ten_cross_publisher_duplicates() -> None:
     # Given
     published = datetime(2026, 7, 10, 6, 0, tzinfo=UTC)

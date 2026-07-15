@@ -14,7 +14,6 @@ from dapa_morning_brief.sources import (
     AGENCY_KEYWORDS,
     DEFENSE_ANCHOR_KEYWORDS,
     DEFENSE_BUSINESS_KEYWORDS,
-    DEFENSE_CONTEXT_KEYWORDS,
     DEFENSE_TECH_KEYWORDS,
     EXCLUDE_KEYWORDS,
     FOREIGN_CONTEXT_KEYWORDS,
@@ -61,11 +60,16 @@ def parse_rss_items(
             continue
         if not is_relevant_article(title, description, source):
             continue
+        metadata_text = f"{title} {description} {source}".casefold()
         if default_section is Section.GOVERNMENT and not _is_current_government_news(
-            title.casefold(),
+            metadata_text,
         ):
             continue
-        section = default_section or classify_title(title)
+        section = default_section or classify_title(
+            title,
+            description=description,
+            source=source,
+        )
         articles.append(
             Article(
                 title=_clean_title(title),
@@ -82,9 +86,14 @@ def parse_rss_items(
     return articles
 
 
-def classify_title(title: str) -> Section:
+def classify_title(
+    title: str,
+    *,
+    description: str = "",
+    source: str = "",
+) -> Section:
     """Classify an article title into the closest newsletter section."""
-    text = title.casefold()
+    text = f"{title} {description} {source}".casefold()
     if _contains_any(text, EXCLUDE_KEYWORDS):
         return Section.POLICY
     if _is_current_government_news(text):
@@ -125,9 +134,13 @@ def is_relevant_article(title: str, description: str, source: str) -> bool:
 
 
 def _is_current_government_news(text: str) -> bool:
-    return _contains_any(text, GOVERNMENT_ACTOR_KEYWORDS) and _contains_any(
-        text,
-        DEFENSE_CONTEXT_KEYWORDS,
+    if not _contains_any(text, GOVERNMENT_ACTOR_KEYWORDS):
+        return False
+    return (
+        _contains_any(text, POLICY_KEYWORDS)
+        or _contains_any(text, DEFENSE_BUSINESS_KEYWORDS)
+        or _is_defense_tech_policy_news(text)
+        or _is_weapon_system_news(text)
     )
 
 

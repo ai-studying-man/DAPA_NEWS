@@ -57,6 +57,32 @@ class RelevanceFilterTest(TestCase):
         assert articles[0].view_count == 4500
         assert articles[0].feed_rank == 0
 
+    def test_parse_rss_classifies_government_actor_in_description(self) -> None:
+        xml = """
+        <rss>
+          <channel>
+            <item>
+              <title>K-방산 소재·부품 공급망 안정화 대책 발표</title>
+              <link>https://example.com/government-policy</link>
+              <description>정부가 방산 공급망 지원 정책을 발표했다.</description>
+              <source>정책뉴스</source>
+              <pubDate>Wed, 15 Jul 2026 22:00:00 GMT</pubDate>
+            </item>
+          </channel>
+        </rss>
+        """
+
+        articles = parse_rss_items(
+            xml,
+            source_name="test",
+            default_section=None,
+            days=1,
+            now=datetime(2026, 7, 16, 0, 0, tzinfo=UTC),
+        )
+
+        assert len(articles) == 1
+        assert articles[0].section is Section.GOVERNMENT
+
     def test_government_news_requires_defense_context(self) -> None:
         # Given
         title = "이재명 대통령, 민생경제 회복 대책 회의 주재"

@@ -18,6 +18,9 @@ AGENCY_QUERY: Final[str] = '"방위사업청" OR "방사청"'
 GOVERNMENT_ACTOR_KEYWORDS: Final[tuple[str, ...]] = (
     "이재명 대통령",
     "대통령",
+    "대통령실",
+    "정부",
+    "국무총리",
     "국방부 장관",
     "국방장관",
     "합참의장",
@@ -192,10 +195,10 @@ KOREA_ANCHOR_KEYWORDS: Final[tuple[str, ...]] = (
 
 SECTION_QUERIES: Final[dict[Section, str]] = {
     Section.GOVERNMENT: (
-        '("이재명 대통령" OR "대통령" OR "국방부 장관" OR "국방장관" '
-        'OR "합참의장" OR "육군참모총장" OR "해군참모총장" OR "공군참모총장") '
-        '("방위사업" OR "방산" OR "K방산" OR "K-방산" OR "무기체계" '
-        'OR "방산수출" OR "국방획득" OR "전력화")'
+        '"정부" 방산 OR "대통령" 방산 OR "대통령실" 국방 '
+        'OR "국무총리" 방산 OR "국방부 장관" 방산 OR "국방장관" 방산 '
+        'OR "합참의장" 무기체계 OR "육군참모총장" 전력화 '
+        'OR "해군참모총장" 전력화 OR "공군참모총장" 전력화'
     ),
     Section.POLICY: (
         '"방위사업청" OR "방사청" OR "방위사업" OR "방위력개선" '

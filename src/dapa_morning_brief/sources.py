@@ -1,3 +1,5 @@
+"""Source definitions and relevance keywords for the morning brief."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -9,6 +11,9 @@ USER_AGENT: Final[str] = (
     "DAPA-Morning-Brief/0.1 "
     "(public RSS newsletter automation; contact: repository owner)"
 )
+
+AGENCY_KEYWORDS: Final[tuple[str, ...]] = ("방위사업청", "방사청")
+AGENCY_QUERY: Final[str] = '"방위사업청" OR "방사청"'
 
 GOVERNMENT_ACTOR_KEYWORDS: Final[tuple[str, ...]] = (
     "이재명 대통령",

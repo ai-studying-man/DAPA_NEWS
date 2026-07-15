@@ -6,7 +6,7 @@ import html
 from typing import TYPE_CHECKING, Final
 
 from dapa_morning_brief.models import Article, Briefing, Section
-from dapa_morning_brief.story_deduplication import are_same_story
+from dapa_morning_brief.story_deduplication import are_same_articles
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -39,6 +39,20 @@ MORNING_QUOTES: Final[tuple[str, ...]] = (
     "빠른 동향 파악이 더 나은 의사결정을 만듭니다.",
 )
 
+SECTION_ICONS: Final[dict[Section, str]] = {
+    Section.GOVERNMENT: "🗞️",
+    Section.POLICY: "🏛️",
+    Section.WEAPON_SYSTEM: "⚙️",
+    Section.EXPORT_BUSINESS: "🌏",
+}
+
+PRACTICE_POINTS: Final[dict[Section, str]] = {
+    Section.GOVERNMENT: "대통령·국방부·군 주요 직위자 발언의 사업 영향 확인 필요.",
+    Section.POLICY: "관련 제도, 예산, 조달 일정의 실무 영향 확인 필요.",
+    Section.WEAPON_SYSTEM: "체계개발, 시험평가, 양산 일정 변동 여부 확인 필요.",
+    Section.EXPORT_BUSINESS: "수출 계약, 공급망, 업체별 사업 영향 확인 필요.",
+}
+
 
 def build_briefing(
     articles: Iterable[Article],
@@ -52,14 +66,11 @@ def build_briefing(
     for section in SECTION_ORDER:
         candidates = sorted(
             (article for article in articles if article.section == section),
-            key=lambda article: (
-                _source_rank(article.source),
-                -article.published_at.timestamp(),
-            ),
+            key=_article_rank,
         )
         for article in candidates:
             if any(
-                are_same_story(article.title, selected.title)
+                are_same_articles(article, selected)
                 for selected in selected_articles
             ):
                 continue
@@ -127,27 +138,11 @@ def daily_quote(today: date) -> str:
 
 
 def _section_heading(section: Section) -> str:
-    match section:
-        case Section.GOVERNMENT:
-            return f"🗞️ {section.title}"
-        case Section.POLICY:
-            return f"🏛️ {section.title}"
-        case Section.WEAPON_SYSTEM:
-            return f"⚙️ {section.title}"
-        case Section.EXPORT_BUSINESS:
-            return f"🌏 {section.title}"
+    return f"{SECTION_ICONS[section]} {section.display_title}"
 
 
 def _practice_point(section: Section) -> str:
-    match section:
-        case Section.GOVERNMENT:
-            return "대통령·국방부·군 주요 직위자 발언의 사업 영향 확인 필요."
-        case Section.POLICY:
-            return "관련 제도, 예산, 조달 일정의 실무 영향 확인 필요."
-        case Section.WEAPON_SYSTEM:
-            return "체계개발, 시험평가, 양산 일정 변동 여부 확인 필요."
-        case Section.EXPORT_BUSINESS:
-            return "수출 계약, 공급망, 업체별 사업 영향 확인 필요."
+    return PRACTICE_POINTS[section]
 
 
 def _source_rank(source: str) -> int:
@@ -155,3 +150,18 @@ def _source_rank(source: str) -> int:
         if keyword in source:
             return index
     return len(SOURCE_PRIORITY)
+
+
+def _article_rank(article: Article) -> tuple[int, int, int, int, int, float]:
+    view_count_known = 0 if article.view_count is not None else 1
+    view_count_rank = -(article.view_count if article.view_count is not None else 0)
+    feed_rank_known = 0 if article.feed_rank is not None else 1
+    feed_rank = article.feed_rank if article.feed_rank is not None else 0
+    return (
+        view_count_known,
+        view_count_rank,
+        feed_rank_known,
+        feed_rank,
+        _source_rank(article.source),
+        -article.published_at.timestamp(),
+    )

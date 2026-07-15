@@ -1,19 +1,25 @@
+"""Collect DAPA-related articles from configured RSS sources."""
+
 from __future__ import annotations
 
 import os
 import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from urllib.parse import quote_plus
 
 import httpx
 
-from dapa_morning_brief.models import Article, Section
 from dapa_morning_brief.rss_parser import (
     classify_title,
     is_relevant_title,
     parse_rss_items,
 )
+
+if TYPE_CHECKING:
+    from dapa_morning_brief.models import Article
 from dapa_morning_brief.sources import (
+    AGENCY_QUERY,
     BROAD_FALLBACK_QUERY,
     RSS_SOURCES,
     SECTION_QUERIES,
@@ -41,7 +47,11 @@ def collect_articles(
     headers = {"User-Agent": os.getenv("DAPA_BRIEF_USER_AGENT", USER_AGENT)}
     collected: list[Article] = []
 
-    with httpx.Client(timeout=timeout, follow_redirects=True, headers=headers) as client:
+    with httpx.Client(
+        timeout=timeout,
+        follow_redirects=True,
+        headers=headers,
+    ) as client:
         if not only_google:
             collected.extend(_collect_official_rss(client, days=days, now=now))
         if include_google or only_google:
@@ -78,7 +88,7 @@ def _collect_official_rss(
     for source in RSS_SOURCES:
         try:
             response = client.get(source.url)
-            response.raise_for_status()
+            _ = response.raise_for_status()
             collected.extend(
                 parse_rss_items(
                     response.text,
@@ -99,9 +109,9 @@ def _collect_google_by_section(
     days: int,
     now: datetime,
 ) -> list[Article]:
-    articles: list[Article] = []
-    for section, query in SECTION_QUERIES.items():
-        articles.extend(_collect_google_query(client, query, days, now, section=section))
+    articles = _collect_google_query(client, AGENCY_QUERY, days, now)
+    for query in SECTION_QUERIES.values():
+        articles.extend(_collect_google_query(client, query, days, now))
     return articles
 
 
@@ -110,13 +120,11 @@ def _collect_google_query(
     query: str,
     days: int,
     now: datetime,
-    *,
-    section: Section | None = None,
 ) -> list[Article]:
     url = build_google_news_rss_url(query, days=days)
     try:
         response = client.get(url)
-        response.raise_for_status()
+        _ = response.raise_for_status()
         return parse_rss_items(
             response.text,
             source_name="Google News",

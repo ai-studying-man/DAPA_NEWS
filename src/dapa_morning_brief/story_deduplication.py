@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import html
 import re
-from typing import Final
+from typing import TYPE_CHECKING, Final
+
+if TYPE_CHECKING:
+    from dapa_morning_brief.models import Article
 
 LOW_SIGNAL_TOKENS: Final[frozenset[str]] = frozenset(
     {
@@ -19,6 +22,9 @@ LOW_SIGNAL_TOKENS: Final[frozenset[str]] = frozenset(
         "전격",
         "최신",
     },
+)
+GENERIC_SERIES_HEADERS: Final[frozenset[str]] = frozenset(
+    {"기고", "단독", "사설", "속보", "인터뷰", "종합", "포토"},
 )
 EVENT_ACTION_TOKENS: Final[frozenset[str]] = frozenset(
     {
@@ -54,6 +60,8 @@ EVENT_CONTEXT_TOKEN_GROUPS: Final[tuple[frozenset[str], ...]] = (
 MIN_SHARED_TOKENS: Final = 3
 MIN_SHARED_CONTEXT_TOKENS: Final = 2
 MIN_CONTAINMENT_RATIO: Final = 0.5
+MIN_DESCRIPTION_SHARED_TOKENS: Final = 4
+MIN_DESCRIPTION_CONTAINMENT_RATIO: Final = 0.7
 MIN_TOKEN_LENGTH_FOR_PARTICLE_STRIP: Final = 4
 KOREAN_PARTICLES: Final[tuple[str, ...]] = (
     "으로",
@@ -77,9 +85,13 @@ def are_same_story(left_title: str, right_title: str) -> bool:
     """Return whether two differently worded titles describe one event."""
     left_normalized = _normalize_title(left_title)
     right_normalized = _normalize_title(right_title)
+    left_series = _series_key(left_title)
+    right_series = _series_key(right_title)
     left_known_event = _known_event_key(left_normalized)
     right_known_event = _known_event_key(right_normalized)
     if left_normalized == right_normalized or (
+        left_series is not None and left_series == right_series
+    ) or (
         left_known_event is not None and left_known_event == right_known_event
     ):
         return True
@@ -105,9 +117,35 @@ def are_same_story(left_title: str, right_title: str) -> bool:
     )
 
 
+def are_same_articles(left: Article, right: Article) -> bool:
+    """Compare article titles and available RSS descriptions."""
+    if are_same_story(left.title, right.title):
+        return True
+    if not left.description or not right.description:
+        return False
+
+    left_tokens = _title_tokens(left.description)
+    right_tokens = _title_tokens(right.description)
+    shared_tokens = left_tokens & right_tokens
+    if len(shared_tokens) < MIN_DESCRIPTION_SHARED_TOKENS:
+        return False
+    shorter_token_count = min(len(left_tokens), len(right_tokens))
+    return len(shared_tokens) / shorter_token_count >= MIN_DESCRIPTION_CONTAINMENT_RATIO
+
+
 def _normalize_title(title: str) -> str:
     source_stripped = re.sub(r"\s+-\s+[^-]+$", "", html.unescape(title))
     return re.sub(r"[^0-9a-z가-힣]+", "", source_stripped.casefold())
+
+
+def _series_key(title: str) -> str | None:
+    matched = re.match(r"^\s*\[([^]]+)]", html.unescape(title))
+    if matched is None:
+        return None
+    normalized = re.sub(r"[^0-9a-z가-힣]+", "", matched.group(1).casefold())
+    if normalized in GENERIC_SERIES_HEADERS:
+        return None
+    return normalized or None
 
 
 def _known_event_key(normalized_title: str) -> str | None:

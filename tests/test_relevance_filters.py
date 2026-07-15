@@ -3,8 +3,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from unittest import TestCase
 
+import pytest
+
 from dapa_morning_brief.models import Section
 from dapa_morning_brief.rss_parser import (
+    MAX_RSS_CHARACTERS,
     classify_title,
     is_relevant_title,
     parse_rss_items,
@@ -12,6 +15,48 @@ from dapa_morning_brief.rss_parser import (
 
 
 class RelevanceFilterTest(TestCase):
+    def test_parse_rss_rejects_oversized_response(self) -> None:
+        with pytest.raises(ValueError, match="size limit"):
+            _ = parse_rss_items(
+                "x" * (MAX_RSS_CHARACTERS + 1),
+                source_name="test",
+                default_section=None,
+                days=1,
+                now=datetime(2026, 7, 15, tzinfo=UTC),
+            )
+
+    def test_parse_rss_preserves_popularity_and_agency_description(self) -> None:
+        # Given
+        xml = """
+        <rss>
+          <channel>
+            <item>
+              <title>획득제도 개선 설명회 개최</title>
+              <link>https://example.com/agency</link>
+              <description>방위사업청이 제도 개선 내용을 발표했다.</description>
+              <source>일반 언론</source>
+              <views>4,500</views>
+              <pubDate>Tue, 14 Jul 2026 22:00:00 GMT</pubDate>
+            </item>
+          </channel>
+        </rss>
+        """
+
+        # When
+        articles = parse_rss_items(
+            xml,
+            source_name="test",
+            default_section=None,
+            days=1,
+            now=datetime(2026, 7, 15, 0, 0, tzinfo=UTC),
+        )
+
+        # Then
+        assert len(articles) == 1
+        assert articles[0].description == "방위사업청이 제도 개선 내용을 발표했다."
+        assert articles[0].view_count == 4500
+        assert articles[0].feed_rank == 0
+
     def test_government_news_requires_defense_context(self) -> None:
         # Given
         title = "이재명 대통령, 민생경제 회복 대책 회의 주재"

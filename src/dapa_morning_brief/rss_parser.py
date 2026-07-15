@@ -1,15 +1,19 @@
+"""Parse and classify RSS article metadata."""
+
 from __future__ import annotations
 
 import email.utils
+import html
 import re
 import xml.etree.ElementTree as ET
-from collections.abc import Iterable
 from datetime import UTC, datetime, time, timedelta, timezone
+from typing import TYPE_CHECKING
 
 from dapa_morning_brief.models import Article, Section
 from dapa_morning_brief.sources import (
-    DEFENSE_BUSINESS_KEYWORDS,
+    AGENCY_KEYWORDS,
     DEFENSE_ANCHOR_KEYWORDS,
+    DEFENSE_BUSINESS_KEYWORDS,
     DEFENSE_CONTEXT_KEYWORDS,
     DEFENSE_TECH_KEYWORDS,
     EXCLUDE_KEYWORDS,
@@ -21,8 +25,12 @@ from dapa_morning_brief.sources import (
     WEAPON_SYSTEM_KEYWORDS,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
 KST = timezone(timedelta(hours=9))
 SEND_WINDOW_START = time(hour=6, minute=30, tzinfo=KST)
+MAX_RSS_CHARACTERS = 5_000_000
 
 
 def parse_rss_items(
@@ -34,24 +42,30 @@ def parse_rss_items(
     now: datetime,
 ) -> list[Article]:
     """Parse RSS XML into article metadata."""
-    root = ET.fromstring(xml_text)
+    if len(xml_text) > MAX_RSS_CHARACTERS:
+        msg = "RSS response exceeds the parser size limit"
+        raise ValueError(msg)
+
+    # ElementTree does not resolve external entities; input size is bounded above.
+    root = ET.fromstring(xml_text)  # noqa: S314
     cutoff = _freshness_cutoff(now, days=days)
     articles: list[Article] = []
 
-    for item in root.findall(".//item"):
+    for feed_rank, item in enumerate(root.findall(".//item")):
         title = _text(item, "title")
         link = _text(item, "link")
+        description = _clean_description(_text(item, "description"))
+        source = _source_from_item(item) or source_name
         published_at = _parse_date(_text(item, "pubDate"))
         if not title or not link or published_at is None or published_at < cutoff:
             continue
-        if not is_relevant_title(title):
+        if not is_relevant_article(title, description, source):
             continue
         if default_section is Section.GOVERNMENT and not _is_current_government_news(
             title.casefold(),
         ):
             continue
         section = default_section or classify_title(title)
-        source = _source_from_item(item) or source_name
         articles.append(
             Article(
                 title=_clean_title(title),
@@ -59,6 +73,9 @@ def parse_rss_items(
                 published_at=published_at,
                 source=source,
                 section=section,
+                description=description,
+                view_count=_view_count_from_item(item),
+                feed_rank=feed_rank,
             ),
         )
 
@@ -83,7 +100,14 @@ def classify_title(title: str) -> Section:
 
 def is_relevant_title(title: str) -> bool:
     """Return whether a title is relevant enough for DAPA morning brief."""
-    text = title.casefold()
+    return is_relevant_article(title, "", "")
+
+
+def is_relevant_article(title: str, description: str, source: str) -> bool:
+    """Return whether available RSS metadata is relevant to the brief."""
+    text = f"{title} {description} {source}".casefold()
+    if _contains_any(text, AGENCY_KEYWORDS):
+        return True
     if _contains_any(text, EXCLUDE_KEYWORDS):
         return False
     if _contains_any(text, FOREIGN_CONTEXT_KEYWORDS) and not _contains_any(
@@ -91,15 +115,13 @@ def is_relevant_title(title: str) -> bool:
         KOREA_ANCHOR_KEYWORDS,
     ):
         return False
-    if _is_current_government_news(text):
-        return True
-    if _is_defense_tech_policy_news(text):
-        return True
-    if _contains_any(text, POLICY_KEYWORDS):
-        return True
-    if _is_weapon_system_news(text):
-        return True
-    return _contains_any(text, DEFENSE_BUSINESS_KEYWORDS)
+    return (
+        _is_current_government_news(text)
+        or _is_defense_tech_policy_news(text)
+        or _contains_any(text, POLICY_KEYWORDS)
+        or _is_weapon_system_news(text)
+        or _contains_any(text, DEFENSE_BUSINESS_KEYWORDS)
+    )
 
 
 def _is_current_government_news(text: str) -> bool:
@@ -171,7 +193,24 @@ def _parse_date(raw: str) -> datetime | None:
 
 
 def _clean_title(title: str) -> str:
-    return re.sub(r"\s+", " ", title).strip()
+    return re.sub(r"\s+", " ", html.unescape(title)).strip()
+
+
+def _clean_description(description: str) -> str:
+    without_tags = re.sub(r"<[^>]+>", " ", description)
+    return re.sub(r"\s+", " ", html.unescape(without_tags)).strip()
+
+
+def _view_count_from_item(item: ET.Element) -> int | None:
+    view_tags = {"hits", "view_count", "viewcount", "views"}
+    for child in item:
+        local_name = child.tag.rsplit("}", maxsplit=1)[-1].casefold()
+        if local_name not in view_tags or child.text is None:
+            continue
+        digits = re.sub(r"[^0-9]", "", child.text)
+        if digits:
+            return int(digits)
+    return None
 
 
 def _contains_any(text: str, needles: Iterable[str]) -> bool:

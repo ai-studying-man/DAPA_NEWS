@@ -53,6 +53,67 @@ PRACTICE_POINTS: Final[dict[Section, str]] = {
     Section.EXPORT_BUSINESS: "수출 계약, 공급망, 업체별 사업 영향 확인 필요.",
 }
 
+PRACTICE_POINT_RULES: Final[tuple[tuple[frozenset[str], str], ...]] = (
+    (
+        frozenset({"국방규격", "특허", "지식재산"}),
+        "국방규격·지식재산권 반영 여부와 분쟁 영향을 확인할 필요.",
+    ),
+    (
+        frozenset({"방산혁신클러스터", "방산혁신단지", "클러스터"}),
+        "클러스터 참여기관·지원사업·지역별 추진 일정을 확인할 필요.",
+    ),
+    (
+        frozenset({"인수", "지분", "매각", "출자"}),
+        "지분·인수·매각 논의가 사업 수행체계에 미치는 영향을 확인할 필요.",
+    ),
+    (
+        frozenset({"대표발의", "법안", "개정안", "입법"}),
+        "법안의 적용 대상·시행 시점과 기존 사업 영향 여부를 확인할 필요.",
+    ),
+    (
+        frozenset({"시험평가", "성능검증", "품질인증", "인증 획득"}),
+        "시험평가·인증 결과와 후속 양산 일정 영향을 확인할 필요.",
+    ),
+    (
+        frozenset({"양산", "전력화", "납품", "배치"}),
+        "양산·전력화·납품 일정과 물량 변동 여부를 확인할 필요.",
+    ),
+    (
+        frozenset({"공급망", "핵심부품", "소재·부품", "부품 국산화"}),
+        "핵심 소재·부품 공급망과 대체조달·납기 위험을 확인할 필요.",
+    ),
+    (
+        frozenset({"수출", "수주", "계약", "협상", "절충교역"}),
+        "수출 계약·협상 조건과 현지화·후속지원 일정을 확인할 필요.",
+    ),
+    (
+        frozenset({"기술동맹", "전략적 파트너", "공동개발", "협력체계"}),
+        "국가·기업 간 협력 범위와 공동개발·인증·수출 연계를 확인할 필요.",
+    ),
+    (
+        frozenset({"예산", "제도", "법률", "시행령", "조달"}),
+        "제도·예산·조달 기준 변경과 진행 사업 적용 시점을 확인할 필요.",
+    ),
+    (
+        frozenset(
+            {"ai", "인공지능", "드론", "무인기", "무인체계", "자율비행", "로봇"},
+        ),
+        "AI·무인체계 적용 범위와 시험·인증·보안 요구사항을 확인할 필요.",
+    ),
+    (
+        frozenset({"전차", "전투기", "함정", "잠수함", "미사일", "소총", "개인화기"}),
+        "대상 무기체계의 요구성능·도입 일정·경쟁 구도 변화를 확인할 필요.",
+    ),
+    (
+        frozenset({"후원", "나눔", "봉사", "기부"}),
+        "방위사업 직접 관련성과 기업 사회공헌 정보의 포함 필요성을 재확인할 필요.",
+    ),
+    (
+        frozenset({"대통령", "대통령실", "정부", "국방장관", "국무총리"}),
+        "정부 지원·주요 직위자 발언의 후속 정책과 사업 반영 여부를 확인할 필요.",
+    ),
+)
+
 
 def build_briefing(
     articles: Iterable[Article],
@@ -109,7 +170,7 @@ def format_telegram_message(briefing: Briefing, *, today: date) -> str:
                     f"{index}. {html.escape(article.title, quote=False)}",
                     (
                         "📌 실무 참고: "
-                        f"{html.escape(_practice_point(section), quote=False)}"
+                        f"{html.escape(_practice_point(article), quote=False)}"
                     ),
                     (
                         "🔗 "
@@ -141,8 +202,12 @@ def _section_heading(section: Section) -> str:
     return f"{SECTION_ICONS[section]} {section.display_title}"
 
 
-def _practice_point(section: Section) -> str:
-    return PRACTICE_POINTS[section]
+def _practice_point(article: Article) -> str:
+    text = f"{article.title} {article.description}".casefold()
+    for keywords, practice_point in PRACTICE_POINT_RULES:
+        if any(keyword in text for keyword in keywords):
+            return practice_point
+    return PRACTICE_POINTS[article.section]
 
 
 def _source_rank(source: str) -> int:

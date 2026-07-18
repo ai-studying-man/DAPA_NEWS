@@ -114,6 +114,22 @@ class CoverageBoundaryTest(TestCase):
         assert is_relevant_title(title) is False
         assert classify_title(title) is not Section.GOVERNMENT
 
+    def test_non_defense_government_narrative_is_rejected(self) -> None:
+        title = "정부는 민법 시행령을 의결했다"
+
+        assert is_relevant_title(title) is False
+        assert classify_title(title) is not Section.GOVERNMENT
+
+    def test_former_and_candidate_defense_leaders_are_not_current(self) -> None:
+        titles = (
+            "국방장관 출신 정치인, 드론 정책 비판",
+            "합참의장 후보자, KF-21 전력화 견해 밝혀",
+        )
+
+        for title in titles:
+            with self.subTest(title=title):
+                assert classify_title(title) is not Section.GOVERNMENT
+
     def test_civilian_company_and_event_news_is_rejected(self) -> None:
         titles = [
             "현대로템, 피지컬 AI 앞세워 글로벌 철도차량 자율주행",
@@ -123,6 +139,7 @@ class CoverageBoundaryTest(TestCase):
             "수원시, 대한민국 드론·UAM 박람회 참가",
             "진천군 드론 방제로 농가 부담 덜어준다",
             "조정받은 K방산, 하반기 주가 반등 기대감",
+            "대한항공, 드론 물류 수출 확대",
         ]
 
         for title in titles:
@@ -139,9 +156,19 @@ class CoverageBoundaryTest(TestCase):
             "KAI, 인도네시아에 T-50i 고등훈련기 6대 최종 납품 완료": (
                 Section.EXPORT_BUSINESS
             ),
+            "T-50i 인도네시아 수출 본격화": Section.EXPORT_BUSINESS,
+            "한화 필리조선소, 美 미사일 추적선 수주…방산조선 보폭 확대": (
+                Section.EXPORT_BUSINESS
+            ),
+            "K2 전차 국내 납품 완료": Section.WEAPON_SYSTEM,
         }
 
         for title, section in expectations.items():
             with self.subTest(title=title):
                 assert is_relevant_title(title) is True
                 assert classify_title(title) is section
+
+    def test_standalone_military_subject_is_relevant(self) -> None:
+        title = "군, AI 기반 드론 전력화 추진"
+
+        assert is_relevant_title(title) is True

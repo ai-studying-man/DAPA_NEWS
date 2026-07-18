@@ -62,6 +62,29 @@ EVENT_CONTEXT_TOKEN_GROUPS: Final[tuple[frozenset[str], ...]] = (
         },
     ),
 )
+EVENT_MARKET_TOKENS: Final[frozenset[str]] = frozenset(
+    {
+        "인도네시아",
+        "폴란드",
+        "루마니아",
+        "사우디",
+        "아랍에미리트",
+        "이라크",
+        "미국",
+        "캐나다",
+        "호주",
+        "필리핀",
+        "태국",
+        "말레이시아",
+        "페루",
+    },
+)
+POSITIVE_EVENT_OUTCOME_TOKENS: Final[frozenset[str]] = frozenset(
+    {"체결", "완료", "성공", "수주", "착수"},
+)
+NEGATIVE_EVENT_OUTCOME_TOKENS: Final[frozenset[str]] = frozenset(
+    {"취소", "무산", "실패", "중단"},
+)
 MIN_SHARED_TOKENS: Final = 3
 MIN_SHARED_CONTEXT_TOKENS: Final = 2
 MIN_CONTAINMENT_RATIO: Final = 0.5
@@ -107,6 +130,9 @@ def are_same_story(left_title: str, right_title: str) -> bool:
     if left_tokens == right_tokens:
         return True
 
+    if _have_conflicting_event_facts(left_tokens, right_tokens):
+        return False
+
     shared_tokens = left_tokens & right_tokens
     shares_event_subject = any(
         len(token) >= MIN_EVENT_SUBJECT_TOKEN_LENGTH for token in shared_tokens
@@ -115,11 +141,12 @@ def are_same_story(left_title: str, right_title: str) -> bool:
         shares_event_subject
         and left_tokens & EVENT_ACTION_TOKENS
         and right_tokens & EVENT_ACTION_TOKENS
-    ):
-        return True
-    if len(shared_tokens) >= MIN_SHARED_CONTEXT_TOKENS and any(
-        left_tokens & context_tokens and right_tokens & context_tokens
-        for context_tokens in EVENT_CONTEXT_TOKEN_GROUPS
+    ) or (
+        len(shared_tokens) >= MIN_SHARED_CONTEXT_TOKENS
+        and any(
+            left_tokens & context_tokens and right_tokens & context_tokens
+            for context_tokens in EVENT_CONTEXT_TOKEN_GROUPS
+        )
     ):
         return True
     if len(shared_tokens) < MIN_SHARED_TOKENS:
@@ -130,6 +157,25 @@ def are_same_story(left_title: str, right_title: str) -> bool:
     return containment_ratio >= MIN_CONTAINMENT_RATIO or bool(
         shared_tokens & EVENT_ACTION_TOKENS,
     )
+
+
+def _have_conflicting_event_facts(
+    left_tokens: frozenset[str],
+    right_tokens: frozenset[str],
+) -> bool:
+    left_markets = left_tokens & EVENT_MARKET_TOKENS
+    right_markets = right_tokens & EVENT_MARKET_TOKENS
+    different_markets = (
+        left_markets and right_markets and left_markets.isdisjoint(right_markets)
+    )
+    conflicting_outcomes = (
+        left_tokens & POSITIVE_EVENT_OUTCOME_TOKENS
+        and right_tokens & NEGATIVE_EVENT_OUTCOME_TOKENS
+    ) or (
+        right_tokens & POSITIVE_EVENT_OUTCOME_TOKENS
+        and left_tokens & NEGATIVE_EVENT_OUTCOME_TOKENS
+    )
+    return bool(different_markets or conflicting_outcomes)
 
 
 def are_same_articles(left: Article, right: Article) -> bool:
@@ -170,9 +216,8 @@ def _known_event_key(normalized_title: str) -> str | None:
         return "공격헬기엔진"
     if "대드론" in normalized_title and "요격" in normalized_title:
         return "대드론요격"
-    if ("천궁ii" in normalized_title or "천궁2" in normalized_title) and any(
-        keyword in normalized_title
-        for keyword in ("중동", "세계방공망", "수출", "해외")
+    if ("천궁ii" in normalized_title or "천궁2" in normalized_title) and (
+        "중동3개국" in normalized_title or "세계방공망" in normalized_title
     ):
         return "천궁ii수출확산"
     return None

@@ -159,6 +159,16 @@ def test_build_briefing_collapses_cheongung_export_expansion_coverage() -> None:
     ]
 
 
+def test_different_cheongung_contract_events_are_not_collapsed() -> None:
+    assert (
+        are_same_story(
+            "천궁-II 사우디 수출 계약 체결",
+            "천궁-II 이라크 수출 사업 취소",
+        )
+        is False
+    )
+
+
 def test_build_briefing_collapses_july_sixteen_cluster_launch_coverage() -> None:
     # Given
     published = datetime(2026, 7, 16, 0, 0, tzinfo=UTC)

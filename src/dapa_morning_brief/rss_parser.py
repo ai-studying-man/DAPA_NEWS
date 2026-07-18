@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from dapa_morning_brief.business_rules import (
     DEFENSE_INDUSTRY_KEYWORDS,
+    contains_defense_anchor,
     is_defense_business_news,
     is_defense_export_news,
 )
@@ -25,7 +26,6 @@ from dapa_morning_brief.government_rules import (
 from dapa_morning_brief.models import Article, Section
 from dapa_morning_brief.sources import (
     AGENCY_KEYWORDS,
-    DEFENSE_ANCHOR_KEYWORDS,
     DEFENSE_TECH_KEYWORDS,
     DOMESTIC_WEAPON_PROGRAM_KEYWORDS,
     EXCLUDE_KEYWORDS,
@@ -155,11 +155,9 @@ def is_relevant_article(title: str, description: str, source: str) -> bool:
 
 def _is_current_government_news(text: str, title: str) -> bool:
     headline_actor = current_government_actor(title)
-    named_current_leader = _contains_any(
-        text,
-        CURRENT_GOVERNMENT_LEADER_KEYWORDS,
-    ) or _contains_any(text, CURRENT_GOVERNMENT_NARRATIVE_KEYWORDS)
-    if headline_actor is None and not named_current_leader:
+    named_current_leader = _contains_any(text, CURRENT_GOVERNMENT_LEADER_KEYWORDS)
+    narrative_actor = _contains_any(text, CURRENT_GOVERNMENT_NARRATIVE_KEYWORDS)
+    if headline_actor is None and not named_current_leader and not narrative_actor:
         return False
     defense_context = (
         _contains_any(text, POLICY_KEYWORDS)
@@ -183,6 +181,7 @@ def _is_current_government_news(text: str, title: str) -> bool:
             named_current_leader
             and _contains_any(text, CURRENT_GOVERNMENT_POLICY_KEYWORDS)
         )
+        or (narrative_actor and defense_context)
         or defense_leader_context
         or generic_presidential_context
         or generic_government_context
@@ -200,7 +199,7 @@ def _freshness_cutoff(now: datetime, *, days: int) -> datetime:
 def _is_defense_tech_policy_news(text: str) -> bool:
     if not _contains_defense_tech_keyword(text):
         return False
-    return _contains_any(text, DEFENSE_ANCHOR_KEYWORDS)
+    return contains_defense_anchor(text)
 
 
 def _contains_defense_tech_keyword(text: str) -> bool:
@@ -229,7 +228,7 @@ def _is_weapon_system_news(text: str) -> bool:
     ):
         return True
     if _contains_any(text, GENERIC_WEAPON_KEYWORDS):
-        return _contains_any(text, DEFENSE_ANCHOR_KEYWORDS) or _contains_any(
+        return contains_defense_anchor(text) or _contains_any(
             text,
             DEFENSE_INDUSTRY_KEYWORDS,
         )

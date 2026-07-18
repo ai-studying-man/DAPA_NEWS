@@ -34,6 +34,13 @@ GENERAL_GOVERNMENT_POLICY_KEYWORDS: Final[tuple[str, ...]] = (
     "국민참여",
 )
 
+CURRENT_GOVERNMENT_NARRATIVE_KEYWORDS: Final[tuple[str, ...]] = (
+    "정부가",
+    "정부는",
+    "대통령실이",
+    "대통령실은",
+)
+
 CURRENT_GOVERNMENT_LEADER_KEYWORDS: Final[tuple[str, ...]] = (
     "이재명 대통령",
     "이 대통령",
@@ -49,10 +56,15 @@ CURRENT_DEFENSE_LEADER_KEYWORDS: Final[tuple[str, ...]] = (
 )
 
 
-def generic_current_government_actor(title: str) -> str | None:
-    """Return a generic domestic-government actor leading the headline."""
+def current_government_actor(title: str) -> str | None:
+    """Return a domestic government actor leading the headline."""
     match = re.match(
-        r"^(?:\[[^\]]+\]\s*)*(대통령실|대통령|정부)(?=$|[\s,:·은이가])",
+        (
+            r"^(?:\[[^\]]+\]\s*)*"
+            r"(대통령실|대통령|정부|국무총리|국방부 장관|국방장관|합참의장|"
+            r"육군참모총장|해군참모총장|공군참모총장)"
+            r"(?=$|[\s,:·은이가])"
+        ),
         title.strip().casefold(),
     )
     return match.group(1) if match is not None else None

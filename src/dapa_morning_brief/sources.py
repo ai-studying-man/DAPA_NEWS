@@ -56,6 +56,8 @@ WEAPON_SYSTEM_KEYWORDS: Final[tuple[str, ...]] = (
     "K2C1",
     "F-15K",
     "KF-16",
+    "T-50",
+    "T-50i",
     "링크-22",
     "LINK-22",
     "자폭드론",
@@ -86,6 +88,8 @@ DOMESTIC_WEAPON_PROGRAM_KEYWORDS: Final[tuple[str, ...]] = (
     "K2C1",
     "F-15K",
     "KF-16",
+    "T-50",
+    "T-50i",
     "링크-22",
     "LINK-22",
 )
@@ -101,79 +105,11 @@ DEFENSE_TECH_KEYWORDS: Final[tuple[str, ...]] = (
 DEFENSE_ANCHOR_KEYWORDS: Final[tuple[str, ...]] = (
     *POLICY_KEYWORDS,
     "국방부",
-    "군",
+    "우리 군",
     "육군",
     "해군",
     "공군",
     "해병대",
-    "ADD",
-    "국방과학연구소",
-)
-
-DEFENSE_BUSINESS_KEYWORDS: Final[tuple[str, ...]] = (
-    "방산",
-    "K방산",
-    "K-방산",
-    "방산수출",
-    "방산기업",
-    "방위산업",
-    "방산계약",
-    "절충교역",
-    "한화에어로스페이스",
-    "한화시스템",
-    "한화오션",
-    "LIG넥스원",
-    "현대로템",
-    "한국항공우주",
-    "KAI",
-    "풍산",
-    "대한항공",
-    "HD현대중공업",
-    "HD현대",
-    "K조선",
-    "K-조선",
-    "함정 수출",
-    "특수선",
-    "NATO 품질인증",
-    "나토 품질인증",
-)
-
-EXPORT_EVENT_KEYWORDS: Final[tuple[str, ...]] = (
-    "수출",
-    "수주",
-    "계약",
-    "시장",
-    "공급망",
-    "스타트업",
-    "파트너십",
-)
-
-EXPORT_DIRECTION_KEYWORDS: Final[tuple[str, ...]] = (
-    "수출",
-    "수주",
-    "해외",
-    "글로벌",
-)
-
-DEFENSE_EXPORT_PROGRAM_KEYWORDS: Final[tuple[str, ...]] = (
-    "K2",
-    "K9 자주포",
-    "KF-21",
-    "KDDX",
-    "L-SAM",
-    "M-SAM",
-    "천궁",
-)
-
-DEFENSE_CONTEXT_KEYWORDS: Final[tuple[str, ...]] = (
-    *POLICY_KEYWORDS,
-    *WEAPON_SYSTEM_KEYWORDS,
-    *DEFENSE_BUSINESS_KEYWORDS,
-    "국방부",
-    "군",
-    "육군",
-    "해군",
-    "공군",
     "ADD",
     "국방과학연구소",
 )
@@ -195,6 +131,14 @@ EXCLUDE_KEYWORDS: Final[tuple[str, ...]] = (
     "가상자산",
     "주가 전망",
     "증시",
+    "주가",
+    "관련주",
+    "수혜주",
+    "목표주가",
+    "반등 기대감",
+    "조정받은",
+    "영업익",
+    "리레이팅",
     "고문 영입",
     "영입",
     "전 대통령",
@@ -232,6 +176,3 @@ KOREA_ANCHOR_KEYWORDS: Final[tuple[str, ...]] = (
     "이 대통령",
     "대통령실",
 )
-
-
-RELEVANT_KEYWORDS: Final[tuple[str, ...]] = DEFENSE_CONTEXT_KEYWORDS

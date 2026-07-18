@@ -95,10 +95,10 @@ def are_same_story(left_title: str, right_title: str) -> bool:
     right_series = _series_key(right_title)
     left_known_event = _known_event_key(left_normalized)
     right_known_event = _known_event_key(right_normalized)
-    if left_normalized == right_normalized or (
-        left_series is not None and left_series == right_series
-    ) or (
-        left_known_event is not None and left_known_event == right_known_event
+    if (
+        left_normalized == right_normalized
+        or (left_series is not None and left_series == right_series)
+        or (left_known_event is not None and left_known_event == right_known_event)
     ):
         return True
 
@@ -170,6 +170,11 @@ def _known_event_key(normalized_title: str) -> str | None:
         return "공격헬기엔진"
     if "대드론" in normalized_title and "요격" in normalized_title:
         return "대드론요격"
+    if ("천궁ii" in normalized_title or "천궁2" in normalized_title) and any(
+        keyword in normalized_title
+        for keyword in ("중동", "세계방공망", "수출", "해외")
+    ):
+        return "천궁ii수출확산"
     return None
 
 
@@ -183,8 +188,7 @@ def _title_tokens(title: str) -> frozenset[str]:
     tokens = {
         token
         for raw_token in raw_tokens
-        if (token := _compact_title_token(raw_token))
-        and token not in LOW_SIGNAL_TOKENS
+        if (token := _compact_title_token(raw_token)) and token not in LOW_SIGNAL_TOKENS
     }
     return frozenset(tokens)
 

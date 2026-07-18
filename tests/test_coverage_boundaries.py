@@ -107,3 +107,41 @@ class CoverageBoundaryTest(TestCase):
             with self.subTest(title=title):
                 assert is_relevant_title(title) is False
                 assert classify_title(title) is not Section.GOVERNMENT
+
+    def test_non_current_defense_leader_context_is_rejected(self) -> None:
+        title = "전격 해임된 '드론 천재' 국방장관, 시위대 거리로"
+
+        assert is_relevant_title(title) is False
+        assert classify_title(title) is not Section.GOVERNMENT
+
+    def test_civilian_company_and_event_news_is_rejected(self) -> None:
+        titles = [
+            "현대로템, 피지컬 AI 앞세워 글로벌 철도차량 자율주행",
+            "현대로템, 철도차량용 ADAS 개발…대만 수출 정조준",
+            "K-조선, 2분기 영업익 2조원대 전망",
+            "전력난 AI 데이터센터…K-조선 바다 위 팹 추진",
+            "수원시, 대한민국 드론·UAM 박람회 참가",
+            "진천군 드론 방제로 농가 부담 덜어준다",
+            "조정받은 K방산, 하반기 주가 반등 기대감",
+        ]
+
+        for title in titles:
+            with self.subTest(title=title):
+                assert is_relevant_title(title) is False
+
+    def test_defense_export_and_domestic_contract_split(self) -> None:
+        expectations = {
+            "우크라 실전 데이터 AI 드론돔 수출…K-방산 시험대": (
+                Section.EXPORT_BUSINESS
+            ),
+            "방사청, KDDX 7월 말 계약 추진…한화오션 우선협상": (Section.WEAPON_SYSTEM),
+            "KAI, 인도네시아에 T-50i 6대 최종 인도 완료": (Section.EXPORT_BUSINESS),
+            "KAI, 인도네시아에 T-50i 고등훈련기 6대 최종 납품 완료": (
+                Section.EXPORT_BUSINESS
+            ),
+        }
+
+        for title, section in expectations.items():
+            with self.subTest(title=title):
+                assert is_relevant_title(title) is True
+                assert classify_title(title) is section

@@ -10,8 +10,7 @@ from dapa_morning_brief.story_deduplication import are_same_story
 def test_same_story_when_kai_acquisition_series_header_matches() -> None:
     # Given
     first_title = (
-        "[불붙는 KAI 인수전] 알박기 한화 VS 수싸움 현대차...내년이 분수령"
-        " - 아주경제"
+        "[불붙는 KAI 인수전] 알박기 한화 VS 수싸움 현대차...내년이 분수령 - 아주경제"
     )
     second_title = (
         "[불붙는 KAI 인수전] 비싸진 몸값에 독과점 논란까지...분할 매각안 솔솔"
@@ -129,6 +128,34 @@ def test_build_briefing_uses_feed_prominence_when_views_are_unavailable() -> Non
     # Then
     assert [article.url for article in briefing.sections[Section.POLICY]] == [
         "https://example.com/higher-feed-position",
+    ]
+
+
+def test_build_briefing_collapses_cheongung_export_expansion_coverage() -> None:
+    published = datetime(2026, 7, 18, 6, 0, tzinfo=UTC)
+    articles = [
+        Article(
+            title="한화시스템, '천궁-II' 다기능 레이다, 중동 3개국 영토 확장",
+            url="https://example.com/lower-views",
+            published_at=published,
+            source="뉴스A",
+            section=Section.WEAPON_SYSTEM,
+            view_count=800,
+        ),
+        Article(
+            title="패트리엇 독주 깼다…'천궁-II'가 세계 방공망 흔든 이유는",
+            url="https://example.com/higher-views",
+            published_at=published,
+            source="뉴스B",
+            section=Section.WEAPON_SYSTEM,
+            view_count=1800,
+        ),
+    ]
+
+    briefing = build_briefing(articles, max_per_section=5)
+
+    assert [article.url for article in briefing.sections[Section.WEAPON_SYSTEM]] == [
+        "https://example.com/higher-views",
     ]
 
 

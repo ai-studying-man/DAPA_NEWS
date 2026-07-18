@@ -18,7 +18,7 @@ from dapa_morning_brief.rss_parser import (
 
 if TYPE_CHECKING:
     from dapa_morning_brief.models import Article
-from dapa_morning_brief.sources import (
+from dapa_morning_brief.source_config import (
     AGENCY_QUERY,
     BROAD_FALLBACK_QUERY,
     RSS_SOURCES,
@@ -72,10 +72,7 @@ def collect_articles(
 def build_google_news_rss_url(query: str, *, days: int = 1) -> str:
     """Build a Korean Google News RSS search URL."""
     encoded = quote_plus(f"({query}) when:{days}d")
-    return (
-        "https://news.google.com/rss/search"
-        f"?q={encoded}&hl=ko&gl=KR&ceid=KR:ko"
-    )
+    return f"https://news.google.com/rss/search?q={encoded}&hl=ko&gl=KR&ceid=KR:ko"
 
 
 def _collect_official_rss(
@@ -110,8 +107,9 @@ def _collect_google_by_section(
     now: datetime,
 ) -> list[Article]:
     articles = _collect_google_query(client, AGENCY_QUERY, days, now)
-    for query in SECTION_QUERIES.values():
-        articles.extend(_collect_google_query(client, query, days, now))
+    for queries in SECTION_QUERIES.values():
+        for query in queries:
+            articles.extend(_collect_google_query(client, query, days, now))
     return articles
 
 

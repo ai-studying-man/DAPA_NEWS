@@ -4,7 +4,7 @@ from unittest import TestCase
 
 from dapa_morning_brief.collector import classify_title, is_relevant_title
 from dapa_morning_brief.models import Section
-from dapa_morning_brief.sources import SECTION_QUERIES
+from dapa_morning_brief.source_config import SECTION_QUERIES
 
 
 class CollectorTest(TestCase):
@@ -51,10 +51,38 @@ class CollectorTest(TestCase):
         assert section is Section.GOVERNMENT
 
     def test_government_query_uses_flat_actor_context_pairs(self) -> None:
-        query = SECTION_QUERIES[Section.GOVERNMENT]
+        queries = SECTION_QUERIES[Section.GOVERNMENT]
+        query = " ".join(queries)
 
+        assert isinstance(queries, tuple)
         assert '"정부" 방산' in query
         assert ") (" not in query
+
+    def test_government_queries_cover_major_policy_without_defense_term(self) -> None:
+        queries = " ".join(SECTION_QUERIES[Section.GOVERNMENT])
+
+        assert '"대통령"' in queries
+        assert '"대통령실"' in queries
+        assert '"정부"' in queries
+        assert '"국무회의"' in queries
+        assert '"업무보고"' in queries
+
+    def test_section_queries_cover_dapa_press_office_topics(self) -> None:
+        queries = " ".join(
+            query
+            for section_queries in SECTION_QUERIES.values()
+            for query in section_queries
+        )
+
+        assert '"국방첨단인증"' in queries
+        assert '"국방품질"' in queries
+        assert '"K2C1"' in queries
+        assert '"K9 자주포"' in queries
+        assert 'OR "K9"' not in queries
+        assert '"F-15K"' in queries
+        assert '"한국 호위함"' in queries
+        assert 'OR "호위함"' not in queries
+        assert '"K조선"' in queries
 
     def test_classify_title_rejects_government_civilian_drone_news(self) -> None:
         title = "2028년 하늘길, 정부가 그린 UAM·드론 청사진"

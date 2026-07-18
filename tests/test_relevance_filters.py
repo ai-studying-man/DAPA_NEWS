@@ -103,6 +103,70 @@ class RelevanceFilterTest(TestCase):
         # Then
         assert section == Section.GOVERNMENT
 
+    def test_major_current_government_policy_is_classified_as_government(
+        self,
+    ) -> None:
+        titles = [
+            "이 대통령, 업무보고서 개혁·혁신 잘돼야…남은 기간 더 중요",
+            "이 대통령 주재 국무회의 AI기본법 시행령 등 21건 의결",
+            "대통령, 국무회의서 AI기본법 시행령 의결",
+            "대통령실, 국민참여 업무보고 일정 공개",
+            "정부, 국정과제 성과 점검 결과 발표",
+        ]
+
+        for title in titles:
+            with self.subTest(title=title):
+                assert is_relevant_title(title) is True
+                assert classify_title(title) is Section.GOVERNMENT
+
+    def test_dapa_institutional_policy_topics_are_relevant(self) -> None:
+        titles = [
+            "국방첨단인증 공청회 개최…AI·우주·드론 기술 국방 활용 확대",
+            "방위사업청·국방기술품질원, 2026 국방품질 종합학술대회 개최",
+            "충남·논산 방산혁신클러스터 본격화…K-방산 도약 발판",
+            "법원, K5방독면 국방규격 속 특허 인정…타 업체 침해 안돼",
+        ]
+
+        for title in titles:
+            with self.subTest(title=title):
+                assert is_relevant_title(title) is True
+                assert classify_title(title) is Section.POLICY
+
+    def test_export_event_outweighs_weapon_terms(self) -> None:
+        titles = [
+            "글로벌 함정 수출 2막 열린다…K조선 특수선 시장 정조준",
+            "K-방산 수출 늘수록 무기체계 공급망 안정화 숙제",
+        ]
+
+        for title in titles:
+            with self.subTest(title=title):
+                assert classify_title(title) is Section.EXPORT_BUSINESS
+
+    def test_named_domestic_weapon_program_needs_no_extra_anchor(self) -> None:
+        title = "238억 잠수함 링크-22 사업 추진"
+
+        assert is_relevant_title(title) is True
+        assert classify_title(title) is Section.WEAPON_SYSTEM
+
+    def test_configured_defense_queries_survive_relevance_filter(self) -> None:
+        expectations = {
+            "한국 해군 차세대 호위함 건조 본격화": Section.WEAPON_SYSTEM,
+            "NATO 품질인증 획득…글로벌 공략 속도": Section.EXPORT_BUSINESS,
+        }
+
+        for title, expected in expectations.items():
+            with self.subTest(title=title):
+                assert is_relevant_title(title) is True
+                assert classify_title(title) is expected
+
+    def test_generic_government_decree_without_defense_context_is_rejected(
+        self,
+    ) -> None:
+        title = "정부, 민법 시행령 개정안 국무회의 의결"
+
+        assert is_relevant_title(title) is False
+        assert classify_title(title) is not Section.GOVERNMENT
+
     def test_defense_ai_news_is_classified_as_policy(self) -> None:
         # Given
         title = "국방부, AI 기반 무인화 전력 운용 확대"

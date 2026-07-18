@@ -6,6 +6,7 @@ import html
 from typing import TYPE_CHECKING, Final
 
 from dapa_morning_brief.models import Article, Briefing, Section
+from dapa_morning_brief.sources import AGENCY_KEYWORDS
 from dapa_morning_brief.story_deduplication import are_same_articles
 
 if TYPE_CHECKING:
@@ -131,14 +132,18 @@ def build_briefing(
         )
         for article in candidates:
             if any(
-                are_same_articles(article, selected)
-                for selected in selected_articles
+                are_same_articles(article, selected) for selected in selected_articles
             ):
                 continue
             buckets[section].append(article)
             selected_articles.append(article)
             if len(buckets[section]) >= max_per_section:
                 break
+        _reserve_agency_article(
+            section_articles=buckets[section],
+            candidates=candidates,
+            selected_articles=selected_articles,
+        )
 
     return Briefing(
         sections={section: tuple(buckets[section]) for section in SECTION_ORDER},
@@ -230,3 +235,36 @@ def _article_rank(article: Article) -> tuple[int, int, int, int, int, float]:
         _source_rank(article.source),
         -article.published_at.timestamp(),
     )
+
+
+def _reserve_agency_article(
+    *,
+    section_articles: list[Article],
+    candidates: list[Article],
+    selected_articles: list[Article],
+) -> None:
+    if not section_articles or any(
+        _is_agency_article(item) for item in section_articles
+    ):
+        return
+    for candidate in candidates:
+        if not _is_agency_article(candidate):
+            continue
+        if any(
+            are_same_articles(candidate, selected) for selected in selected_articles
+        ):
+            continue
+        replaced = section_articles[-1]
+        if replaced.view_count is not None and (
+            candidate.view_count is None or candidate.view_count < replaced.view_count
+        ):
+            continue
+        section_articles[-1] = candidate
+        selected_articles.remove(replaced)
+        selected_articles.append(candidate)
+        return
+
+
+def _is_agency_article(article: Article) -> bool:
+    metadata = f"{article.title} {article.description} {article.source}".casefold()
+    return any(keyword.casefold() in metadata for keyword in AGENCY_KEYWORDS)

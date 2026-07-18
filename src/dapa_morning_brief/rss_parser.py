@@ -138,15 +138,17 @@ def is_relevant_article(title: str, description: str, source: str) -> bool:
         return True
     if _contains_any(text, EXCLUDE_KEYWORDS):
         return False
-    if _contains_any(text, FOREIGN_CONTEXT_KEYWORDS) and not _contains_any(
-        text,
-        KOREA_ANCHOR_KEYWORDS,
+    defense_export = is_defense_export_news(text)
+    if (
+        _contains_any(text, FOREIGN_CONTEXT_KEYWORDS)
+        and not _contains_any(text, KOREA_ANCHOR_KEYWORDS)
+        and not defense_export
     ):
         return False
     return (
         _is_current_government_news(text, title)
         or _is_defense_tech_policy_news(text)
-        or is_defense_export_news(text)
+        or defense_export
         or _contains_any(text, POLICY_KEYWORDS)
         or _is_weapon_system_news(text)
         or is_defense_business_news(text)

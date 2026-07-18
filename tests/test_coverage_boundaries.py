@@ -140,6 +140,7 @@ class CoverageBoundaryTest(TestCase):
             "진천군 드론 방제로 농가 부담 덜어준다",
             "조정받은 K방산, 하반기 주가 반등 기대감",
             "대한항공, 드론 물류 수출 확대",
+            "김 군, AI 드론 대회 우승",
         ]
 
         for title in titles:
@@ -157,6 +158,7 @@ class CoverageBoundaryTest(TestCase):
                 Section.EXPORT_BUSINESS
             ),
             "T-50i 인도네시아 수출 본격화": Section.EXPORT_BUSINESS,
+            "KAI, 미국에 T-50 훈련기 수출 계약": Section.EXPORT_BUSINESS,
             "한화 필리조선소, 美 미사일 추적선 수주…방산조선 보폭 확대": (
                 Section.EXPORT_BUSINESS
             ),

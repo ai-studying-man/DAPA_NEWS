@@ -106,7 +106,7 @@ SPECIFIC_WEAPON_KEYWORDS: Final[tuple[str, ...]] = tuple(
     if keyword not in GENERIC_WEAPON_KEYWORDS
 )
 STANDALONE_MILITARY_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"(?<![0-9a-z가-힣])군(?=$|[\s,:·은이가])",
+    r"^(?:\[[^\]]+]\s*)*군(?=$|[\s,:·은이가])",
 )
 
 

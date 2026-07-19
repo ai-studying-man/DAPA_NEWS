@@ -53,6 +53,7 @@ DIRECT_EXPORT_KEYWORDS: Final[tuple[str, ...]] = (
 
 EXPORT_TRANSACTION_KEYWORDS: Final[tuple[str, ...]] = (
     "수주",
+    "납품",
     "최종 인도",
     "인도 완료",
     "최종 납품",
@@ -62,6 +63,7 @@ EXPORT_TRANSACTION_KEYWORDS: Final[tuple[str, ...]] = (
 
 FOREIGN_MARKET_KEYWORDS: Final[tuple[str, ...]] = (
     "인도네시아",
+    "인니",
     "폴란드",
     "루마니아",
     "사우디",

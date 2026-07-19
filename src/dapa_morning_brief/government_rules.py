@@ -48,7 +48,7 @@ def current_government_actor(title: str) -> str | None:
     match = re.match(
         (
             r"^(?:\[[^\]]+\]\s*)*"
-            r"(대통령실|대통령|정부|국무총리|국방부 장관|국방장관|합참의장|"
+            r"(李|대통령실|대통령|정부|국무총리|국방부 장관|국방장관|합참의장|"
             r"육군참모총장|해군참모총장|공군참모총장)"
             r"(?=$|[\s,:·은이가])"
         ),
@@ -59,4 +59,5 @@ def current_government_actor(title: str) -> str | None:
     suffix = title.strip().casefold()[match.end() :].lstrip()
     if suffix.startswith(("출신", "전직", "후보", "후보자", "지명자")):
         return None
-    return match.group(1)
+    actor = match.group(1)
+    return "대통령" if actor == "李" else actor

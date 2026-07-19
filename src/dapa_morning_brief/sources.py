@@ -132,8 +132,11 @@ EXCLUDE_KEYWORDS: Final[tuple[str, ...]] = (
     "주가 전망",
     "증시",
     "주가",
+    "방산주",
+    "코스피",
     "관련주",
     "수혜주",
+    "수혜 기대",
     "목표주가",
     "반등 기대감",
     "조정받은",
@@ -148,6 +151,20 @@ EXCLUDE_KEYWORDS: Final[tuple[str, ...]] = (
     "사망",
     "지병",
     "사고",
+)
+
+UNTRUSTED_SOURCE_KEYWORDS: Final[tuple[str, ...]] = (
+    "네이버 프리미엄콘텐츠",
+    "네이버 블로그",
+    "naver blog",
+    "네이버 카페",
+    "유튜브",
+    "youtube",
+)
+
+UNTRUSTED_TITLE_PREFIXES: Final[tuple[str, ...]] = (
+    "댓글 :",
+    "댓글:",
 )
 
 FOREIGN_CONTEXT_KEYWORDS: Final[tuple[str, ...]] = (

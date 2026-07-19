@@ -120,6 +120,12 @@ class CoverageBoundaryTest(TestCase):
         assert is_relevant_title(title) is False
         assert classify_title(title) is not Section.GOVERNMENT
 
+    def test_president_hanja_alias_with_work_report_is_government(self) -> None:
+        title = "李 '여기에 실제 인물 몇 명?'…AI 영상까지 등장한 업무보고"
+
+        assert is_relevant_title(title) is True
+        assert classify_title(title) is Section.GOVERNMENT
+
     def test_former_and_candidate_defense_leaders_are_not_current(self) -> None:
         titles = (
             "국방장관 출신 정치인, 드론 정책 비판",
@@ -139,6 +145,8 @@ class CoverageBoundaryTest(TestCase):
             "수원시, 대한민국 드론·UAM 박람회 참가",
             "진천군 드론 방제로 농가 부담 덜어준다",
             "조정받은 K방산, 하반기 주가 반등 기대감",
+            "상반기 치솟은 방산주, 이젠 코스피 밑돌아",
+            "제이에스링크, 방산 공급망 수혜 기대",
             "대한항공, 드론 물류 수출 확대",
             "김 군, AI 드론 대회 우승",
         ]
@@ -155,6 +163,10 @@ class CoverageBoundaryTest(TestCase):
             "방사청, KDDX 7월 말 계약 추진…한화오션 우선협상": (Section.WEAPON_SYSTEM),
             "KAI, 인도네시아에 T-50i 6대 최종 인도 완료": (Section.EXPORT_BUSINESS),
             "KAI, 인도네시아에 T-50i 고등훈련기 6대 최종 납품 완료": (
+                Section.EXPORT_BUSINESS
+            ),
+            "KAI, 인도네시아에 T-50 6대 납품…22대 공급": (Section.EXPORT_BUSINESS),
+            "KAI, 인니에 T-50i 고등훈련기 6대 최종 납품 완료": (
                 Section.EXPORT_BUSINESS
             ),
             "T-50i 인도네시아 수출 본격화": Section.EXPORT_BUSINESS,

@@ -15,6 +15,36 @@ from dapa_morning_brief.rss_parser import (
 
 
 class RelevanceFilterTest(TestCase):
+    def test_parse_rss_rejects_comment_and_premium_content(self) -> None:
+        xml = """
+        <rss>
+          <channel>
+            <item>
+              <title>댓글 : 방사청 내부 문서 유출?! TFA-50의 정체는?</title>
+              <link>https://example.com/comment</link>
+              <source>네이버 프리미엄콘텐츠</source>
+              <pubDate>Sat, 18 Jul 2026 22:00:00 GMT</pubDate>
+            </item>
+            <item>
+              <title>방사청 FA-50 수출예비승인 포착</title>
+              <link>https://example.com/premium</link>
+              <source>네이버 프리미엄콘텐츠</source>
+              <pubDate>Sat, 18 Jul 2026 22:10:00 GMT</pubDate>
+            </item>
+          </channel>
+        </rss>
+        """
+
+        articles = parse_rss_items(
+            xml,
+            source_name="Google News",
+            default_section=None,
+            days=1,
+            now=datetime(2026, 7, 19, 0, 0, tzinfo=UTC),
+        )
+
+        assert articles == []
+
     def test_parse_rss_rejects_oversized_response(self) -> None:
         with pytest.raises(ValueError, match="size limit"):
             _ = parse_rss_items(

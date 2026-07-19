@@ -33,6 +33,8 @@ from dapa_morning_brief.sources import (
     GENERIC_WEAPON_KEYWORDS,
     KOREA_ANCHOR_KEYWORDS,
     POLICY_KEYWORDS,
+    UNTRUSTED_SOURCE_KEYWORDS,
+    UNTRUSTED_TITLE_PREFIXES,
     WEAPON_SYSTEM_KEYWORDS,
 )
 
@@ -134,6 +136,12 @@ def is_relevant_title(title: str) -> bool:
 def is_relevant_article(title: str, description: str, source: str) -> bool:
     """Return whether available RSS metadata is relevant to the brief."""
     text = f"{title} {description} {source}".casefold()
+    normalized_title = title.strip().casefold()
+    if normalized_title.startswith(UNTRUSTED_TITLE_PREFIXES) or _contains_any(
+        source.casefold(),
+        UNTRUSTED_SOURCE_KEYWORDS,
+    ):
+        return False
     if _contains_any(text, AGENCY_KEYWORDS):
         return True
     if _contains_any(text, EXCLUDE_KEYWORDS):

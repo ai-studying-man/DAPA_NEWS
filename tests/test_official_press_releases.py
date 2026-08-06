@@ -18,7 +18,7 @@ def test_parse_dapa_press_releases_builds_direct_detail_link() -> None:
     document = (
         '<table><tbody><tr><td class="num">691</td><td class="subject">'
         '<a href="#none" onclick="fn_selectDoc(\'58959\')">'
-        '<p class="text">‘대체불가 K-방산’으로의 도약</p>'
+        '<p class="text">\u2018대체불가 K-방산\u2019으로의 도약</p>'
         '<span class="new">새 글</span></a></td><td>2026-08-05</td>'
         '<td class="view">151</td></tr></tbody></table>'
     )
@@ -30,7 +30,7 @@ def test_parse_dapa_press_releases_builds_direct_detail_link() -> None:
     assert releases == (
         OfficialPressRelease(
             agency="방위사업청",
-            title="‘대체불가 K-방산’으로의 도약",
+            title="\u2018대체불가 K-방산\u2019으로의 도약",
             url=(
                 "https://www.dapa.go.kr/dapa/doc/selectDoc.do?"
                 "bbsSeq=326&docSeq=58959&menuSeq=3069"
@@ -105,7 +105,7 @@ def test_collect_latest_press_releases_returns_one_per_official_board() -> None:
         ),
         ("https://www.dapa.go.kr/dapa/doc/selectDocList.do?bbsSeq=326&menuSeq=3069"): (
             '<table><tr><td class="subject"><a onclick="fn_selectDoc(\'58959\')">'
-            "<p>‘대체불가 K-방산’으로의 도약</p></a></td>"
+            "<p>\u2018대체불가 K-방산\u2019으로의 도약</p></a></td>"
             "<td>2026-08-05</td></tr></table>"
         ),
     }

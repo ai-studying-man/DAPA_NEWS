@@ -65,8 +65,7 @@ class CliTest(TestCase):
                 ],
             ) as collect,
             patch(
-                "dapa_morning_brief.official_press_releases."
-                + "collect_latest_press_releases",
+                "dapa_morning_brief.official_press_releases.collect_latest_press_releases",
                 return_value=(),
             ),
             patch("sys.stdout", output),
@@ -84,8 +83,7 @@ class CliTest(TestCase):
         with (
             patch("dapa_morning_brief.cli.collect_articles", return_value=[]),
             patch(
-                "dapa_morning_brief.official_press_releases."
-                + "collect_latest_press_releases",
+                "dapa_morning_brief.official_press_releases.collect_latest_press_releases",
                 return_value=(),
             ),
             patch("sys.stdout", output),
@@ -125,8 +123,7 @@ class CliTest(TestCase):
         with (
             patch("dapa_morning_brief.cli.collect_articles", return_value=[article]),
             patch(
-                "dapa_morning_brief.official_press_releases."
-                + "collect_latest_press_releases",
+                "dapa_morning_brief.official_press_releases.collect_latest_press_releases",
                 return_value=(),
             ),
             patch(
@@ -166,8 +163,7 @@ class CliTest(TestCase):
         with (
             patch("dapa_morning_brief.cli.collect_articles", return_value=[]),
             patch(
-                "dapa_morning_brief.official_press_releases."
-                + "collect_latest_press_releases",
+                "dapa_morning_brief.official_press_releases.collect_latest_press_releases",
                 return_value=(release,),
             ),
             patch("sys.stdout", output),

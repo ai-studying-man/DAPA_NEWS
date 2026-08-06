@@ -196,8 +196,15 @@ class BriefingTest(TestCase):
         )
 
         # Then
-        expected_mnd = '1. 국방부 보도자료(26.8.5.) : <a href="https://www.mnd.go.kr/bbs/mnd/13000005/DPIM_118612/artclView.do"><b>국방부 업무보고</b></a>'
-        expected_dapa = '2. 방위사업청 보도자료(26.8.5.) : <a href="https://www.dapa.go.kr/dapa/doc/selectDoc.do?bbsSeq=326&amp;docSeq=58959&amp;menuSeq=3069"><b>\u2018대체불가 K-방산\u2019으로의 도약</b></a>'
+        mnd_url = "https://www.mnd.go.kr/bbs/mnd/13000005/DPIM_118612/artclView.do"
+        dapa_base = "https://www.dapa.go.kr/dapa/doc/selectDoc.do?bbsSeq=326"
+        dapa_url = f"{dapa_base}&amp;docSeq={58959}&amp;menuSeq=3069"
+        mnd_prefix = '1. 국방부 보도자료(26.8.5.) : <a href="'
+        mnd_suffix = '"><b>국방부 업무보고</b></a>'
+        expected_mnd = f"{mnd_prefix}{mnd_url}{mnd_suffix}"
+        dapa_prefix = '2. 방위사업청 보도자료(26.8.5.) : <a href="'
+        dapa_suffix = '"><b>\u2018대체불가 K-방산\u2019으로의 도약</b></a>'
+        expected_dapa = f"{dapa_prefix}{dapa_url}{dapa_suffix}"
         assert expected_mnd in message
         assert expected_dapa in message
         assert '"가장 최근의 보도자료를 수집합니다"' in message

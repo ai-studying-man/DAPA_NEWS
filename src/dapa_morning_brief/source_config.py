@@ -20,6 +20,7 @@ def _query(*parts: str) -> str:
 
 SECTION_QUERIES: Final[dict[Section, tuple[str, ...]]] = {
     Section.GOVERNMENT: (
+        '"국방부"',
         _query(
             '"대통령" "국무회의" OR "대통령" "업무보고"',
             'OR "대통령실" "국정과제" OR "대통령실" "업무보고"',

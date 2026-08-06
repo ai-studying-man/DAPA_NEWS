@@ -67,6 +67,14 @@ class CollectorTest(TestCase):
         assert '"국무회의"' in queries
         assert '"업무보고"' in queries
 
+    def test_government_query_covers_defense_ministry(self) -> None:
+        # Given
+        queries = " ".join(SECTION_QUERIES[Section.GOVERNMENT])
+
+        # When / Then
+        assert SECTION_QUERIES[Section.GOVERNMENT][0] == '"국방부"'
+        assert '"국방부"' in queries
+
     def test_section_queries_cover_dapa_press_office_topics(self) -> None:
         queries = " ".join(
             query

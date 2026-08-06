@@ -5,12 +5,16 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import datetime
 from io import TextIOWrapper
 from typing import TYPE_CHECKING, Final
+from zoneinfo import ZoneInfo
 
+from dapa_morning_brief import official_press_releases
+from dapa_morning_brief.article_content import fetch_article_bodies
 from dapa_morning_brief.briefing import build_briefing, format_telegram_message
 from dapa_morning_brief.collector import collect_articles
+from dapa_morning_brief.copilot_summary import summarize_article_bodies
 from dapa_morning_brief.models import Section
 from dapa_morning_brief.telegram import (
     TelegramSendError,
@@ -23,6 +27,10 @@ if TYPE_CHECKING:
 
 DEFAULT_DAYS: Final = 1
 DEFAULT_FALLBACK_DAYS: Final = 2
+KST: Final[ZoneInfo] = ZoneInfo("Asia/Seoul")
+COPILOT_SUMMARY_TEMPLATE: Final = (
+    "Copilot summary: generated={generated} fallback={fallback} bodies={bodies}\n"
+)
 
 
 class BriefNamespace(argparse.Namespace):
@@ -64,9 +72,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
     briefing = build_briefing(articles, max_per_section=max_per_section)
+    today = datetime.now(KST).date()
+    latest_press_releases = official_press_releases.collect_latest_press_releases(
+        as_of=today,
+    )
+    practice_points = ()
+    if not args.dry_run:
+        article_bodies = fetch_article_bodies(briefing)
+        practice_points = summarize_article_bodies(article_bodies)
+        selected_count = sum(len(items) for items in briefing.sections.values())
+        _ = sys.stderr.write(
+            COPILOT_SUMMARY_TEMPLATE.format(
+                generated=len(practice_points),
+                fallback=selected_count - len(practice_points),
+                bodies=len(article_bodies),
+            ),
+        )
     message = format_telegram_message(
         briefing,
-        today=datetime.now(UTC).astimezone().date(),
+        today=today,
+        practice_points=practice_points,
+        official_press_releases=latest_press_releases,
     )
 
     if args.dry_run:

@@ -197,18 +197,6 @@ class RelevanceFilterTest(TestCase):
         assert is_relevant_title(title) is False
         assert classify_title(title) is not Section.GOVERNMENT
 
-    def test_defense_ai_news_is_classified_as_policy(self) -> None:
-        # Given
-        title = "국방부, AI 기반 무인화 전력 운용 확대"
-
-        # When
-        is_relevant = is_relevant_title(title)
-        section = classify_title(title)
-
-        # Then
-        assert is_relevant is True
-        assert section == Section.POLICY
-
     def test_ai_news_without_defense_context_is_rejected(self) -> None:
         # Given
         title = "AI 산업 투자 확대에 국내 기업 관심 집중"

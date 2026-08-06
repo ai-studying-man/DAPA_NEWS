@@ -1,0 +1,121 @@
+from __future__ import annotations
+
+import subprocess
+from unittest.mock import patch
+
+from dapa_morning_brief.copilot_summary import (
+    ArticleBody,
+    parse_copilot_output,
+    summarize_article_bodies,
+)
+
+
+def test_parse_copilot_output_returns_typed_practice_points() -> None:
+    # Given
+    raw_output = (
+        '[{"article_url":"https://example.com/a",'
+        '"text":"계약 일정과 후속 조달 영향을 확인할 필요가 있음."}]'
+    )
+
+    # When
+    points = parse_copilot_output(raw_output)
+
+    # Then
+    assert len(points) == 1
+    assert points[0].article_url == "https://example.com/a"
+    assert points[0].text == "계약 일정과 후속 조달 영향을 확인할 필요가 있음."
+
+
+def test_parse_copilot_output_rejects_invalid_json() -> None:
+    # Given
+    invalid_output = "요약 결과를 생성하지 못했습니다."
+
+    # When
+    points = parse_copilot_output(invalid_output)
+
+    # Then
+    assert points == ()
+
+
+def test_parse_copilot_output_accepts_json_code_fence() -> None:
+    # Given
+    raw_output = (
+        "```json\n"
+        '[{"article_url":"https://example.com/a",'
+        '"text":"일정을 확인할 필요가 있음."}]\n'
+        "```"
+    )
+
+    # When
+    points = parse_copilot_output(raw_output)
+
+    # Then
+    assert len(points) == 1
+
+
+def test_summarize_article_bodies_falls_back_when_copilot_limit_is_exceeded() -> None:
+    # Given
+    article = ArticleBody(
+        article_url="https://example.com/a",
+        title="방산 계약 일정 발표",
+        source="테스트뉴스",
+        body="방산 계약 체결 시점과 납품 일정이 발표됐다.",
+    )
+
+    quota_exceeded = subprocess.CompletedProcess(
+        args=("copilot",),
+        returncode=1,
+        stdout="",
+        stderr="AI credit limit exceeded",
+    )
+
+    # When
+    with (
+        patch(
+            "dapa_morning_brief.copilot_summary.shutil.which",
+            return_value="copilot",
+        ),
+        patch(
+            "dapa_morning_brief.copilot_summary.subprocess.run",
+            return_value=quota_exceeded,
+        ),
+    ):
+        points = summarize_article_bodies((article,))
+
+    # Then
+    assert points == ()
+
+
+def test_summarize_article_bodies_rejects_unknown_article_url() -> None:
+    # Given
+    article = ArticleBody(
+        article_url="https://example.com/known",
+        title="방산 계약 일정 발표",
+        source="테스트뉴스",
+        body="방산 계약 체결 시점과 납품 일정이 발표됐다.",
+    )
+    response = subprocess.CompletedProcess(
+        args=("copilot",),
+        returncode=0,
+        stdout=(
+            '[{"article_url":"https://example.com/unknown",'
+            '"text":"알 수 없는 기사 요약"}]'
+        ),
+        stderr="",
+    )
+
+    # When
+    with (
+        patch(
+            "dapa_morning_brief.copilot_summary.shutil.which",
+            return_value="copilot",
+        ),
+        patch(
+            "dapa_morning_brief.copilot_summary.subprocess.run",
+            return_value=response,
+        ),
+    ):
+        points = summarize_article_bodies((article,))
+
+    # Then
+    assert points == ()

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import email.utils
-import html
 import re
 import xml.etree.ElementTree as ET
 from datetime import UTC, datetime, time, timedelta, timezone
@@ -24,6 +22,14 @@ from dapa_morning_brief.government_rules import (
     current_government_actor,
 )
 from dapa_morning_brief.models import Article, Section
+from dapa_morning_brief.rss_metadata import (
+    _clean_description,
+    _clean_title,
+    _parse_date,
+    _source_from_item,
+    _text,
+    _view_count_from_item,
+)
 from dapa_morning_brief.sources import (
     AGENCY_KEYWORDS,
     DEFENSE_TECH_KEYWORDS,
@@ -164,6 +170,8 @@ def is_relevant_article(title: str, description: str, source: str) -> bool:
 
 
 def _is_current_government_news(text: str, title: str) -> bool:
+    if "국방부" in text:
+        return True
     headline_actor = current_government_actor(title)
     named_current_leader = _contains_any(text, CURRENT_GOVERNMENT_LEADER_KEYWORDS)
     narrative_actor = _contains_any(text, CURRENT_GOVERNMENT_NARRATIVE_KEYWORDS)
@@ -243,50 +251,6 @@ def _is_weapon_system_news(text: str) -> bool:
             DEFENSE_INDUSTRY_KEYWORDS,
         )
     return False
-
-
-def _text(item: ET.Element, name: str) -> str:
-    found = item.find(name)
-    if found is None or found.text is None:
-        return ""
-    return found.text.strip()
-
-
-def _source_from_item(item: ET.Element) -> str:
-    for child in item:
-        if child.tag.endswith("source") and child.text:
-            return child.text.strip()
-    return ""
-
-
-def _parse_date(raw: str) -> datetime | None:
-    if not raw:
-        return None
-    parsed = email.utils.parsedate_to_datetime(raw)
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
-
-
-def _clean_title(title: str) -> str:
-    return re.sub(r"\s+", " ", html.unescape(title)).strip()
-
-
-def _clean_description(description: str) -> str:
-    without_tags = re.sub(r"<[^>]+>", " ", description)
-    return re.sub(r"\s+", " ", html.unescape(without_tags)).strip()
-
-
-def _view_count_from_item(item: ET.Element) -> int | None:
-    view_tags = {"hits", "view_count", "viewcount", "views"}
-    for child in item:
-        local_name = child.tag.rsplit("}", maxsplit=1)[-1].casefold()
-        if local_name not in view_tags or child.text is None:
-            continue
-        digits = re.sub(r"[^0-9]", "", child.text)
-        if digits:
-            return int(digits)
-    return None
 
 
 def _contains_any(text: str, needles: Iterable[str]) -> bool:

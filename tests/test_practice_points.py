@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from dapa_morning_brief.briefing import build_briefing, format_telegram_message
-from dapa_morning_brief.models import Article, Section
+from dapa_morning_brief.models import Article, PracticePoint, Section
 
 
 def test_format_telegram_message_uses_article_specific_practice_points() -> None:
@@ -71,3 +71,29 @@ def test_format_telegram_message_uses_article_specific_practice_points() -> None
     assert "법안의 적용 대상·시행 시점과 기존 사업 영향 여부를 확인할 필요." in message
     assert "국가·기업 간 협력 범위와 공동개발·인증·수출 연계를 확인할 필요." in message
     assert "기업 사회공헌 정보의 포함 필요성을 재확인할 필요." in message
+
+
+def test_format_telegram_message_prefers_copilot_practice_point() -> None:
+    # Given
+    article = Article(
+        title="KF-21 후속 양산 일정 확정",
+        url="https://example.com/kf21",
+        published_at=datetime(2026, 8, 6, tzinfo=UTC),
+        source="테스트뉴스",
+        section=Section.WEAPON_SYSTEM,
+    )
+    briefing = build_briefing([article], max_per_section=1)
+    copilot_point = PracticePoint(
+        article_url=article.url,
+        text="후속 양산 계약 시점과 납품 일정을 확인할 필요가 있음.",
+    )
+
+    # When
+    message = format_telegram_message(
+        briefing,
+        today=datetime(2026, 8, 6, tzinfo=UTC).date(),
+        practice_points=(copilot_point,),
+    )
+
+    # Then
+    assert copilot_point.text in message

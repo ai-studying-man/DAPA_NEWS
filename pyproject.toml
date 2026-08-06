@@ -8,7 +8,9 @@ dependencies = [
     "feedparser>=6.0.11",
     "googlenewsdecoder>=0.1.7",
     "httpx>=0.28.1",
+    "pydantic>=2.11.0",
     "pyTelegramBotAPI>=4.28.0",
+    "trafilatura>=2.0.0",
 ]
 
 [project.scripts]

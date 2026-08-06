@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from unittest.mock import patch
 
@@ -14,7 +15,7 @@ def test_parse_copilot_output_returns_typed_practice_points() -> None:
     # Given
     raw_output = (
         '[{"article_url":"https://example.com/a",'
-        '"text":"계약 일정과 후속 조달 영향을 확인할 필요가 있음."}]'
+        '"text":"계약 일정과 후속 조달·납품 영향을 확인해야 함"}]'
     )
 
     # When
@@ -23,7 +24,35 @@ def test_parse_copilot_output_returns_typed_practice_points() -> None:
     # Then
     assert len(points) == 1
     assert points[0].article_url == "https://example.com/a"
-    assert points[0].text == "계약 일정과 후속 조달 영향 확인"
+    assert points[0].text == "계약 일정과 후속 조달·납품 영향 확인"
+
+
+def test_parse_copilot_output_rejects_practice_point_shorter_than_20_chars() -> None:
+    # Given
+    raw_output = json.dumps(
+        [{"article_url": "https://example.com/a", "text": f"{'가' * 17}확인"}],
+        ensure_ascii=False,
+    )
+
+    # When
+    points = parse_copilot_output(raw_output)
+
+    # Then
+    assert points == ()
+
+
+def test_parse_copilot_output_rejects_practice_point_longer_than_30_chars() -> None:
+    # Given
+    raw_output = json.dumps(
+        [{"article_url": "https://example.com/a", "text": f"{'가' * 29}확인"}],
+        ensure_ascii=False,
+    )
+
+    # When
+    points = parse_copilot_output(raw_output)
+
+    # Then
+    assert points == ()
 
 
 def test_parse_copilot_output_rejects_invalid_json() -> None:
@@ -42,7 +71,7 @@ def test_parse_copilot_output_accepts_json_code_fence() -> None:
     raw_output = (
         "```json\n"
         '[{"article_url":"https://example.com/a",'
-        '"text":"일정을 확인할 필요가 있음."}]\n'
+        '"text":"후속 양산 계약 시점 및 납품 일정 확인"}]\n'
         "```"
     )
 

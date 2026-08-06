@@ -4,6 +4,24 @@ from datetime import UTC, datetime
 
 from dapa_morning_brief.briefing import build_briefing, format_telegram_message
 from dapa_morning_brief.models import Article, PracticePoint, Section
+from dapa_morning_brief.telegram_format import (
+    PRACTICE_POINT_RULES,
+    PRACTICE_POINTS,
+)
+
+
+def test_keyword_practice_points_stay_between_20_and_30_chars() -> None:
+    # Given
+    practice_points = (
+        *PRACTICE_POINTS.values(),
+        *(point for _, point in PRACTICE_POINT_RULES),
+    )
+
+    # When
+    lengths = tuple(map(len, practice_points))
+
+    # Then
+    assert all(20 <= length <= 30 for length in lengths)
 
 
 def test_format_telegram_message_uses_article_specific_practice_points() -> None:
@@ -69,8 +87,8 @@ def test_format_telegram_message_uses_article_specific_practice_points() -> None
     assert "클러스터 참여기관·지원사업·지역별 추진 일정 확인" in message
     assert "시험평가·인증 결과 및 후속 양산 일정 영향 확인" in message
     assert "법안 적용 대상·시행 시점 및 기존 사업 영향 확인" in message
-    assert "국가·기업 간 협력 범위 및 공동개발·인증·수출 연계 확인" in message
-    assert "방위사업 직접 관련성 및 기업 사회공헌 정보 포함 필요성 확인" in message
+    assert "국가·기업 협력 범위 및 공동개발·인증·수출 연계 확인" in message
+    assert "방위사업 관련성 및 기업 사회공헌 정보 포함 여부 확인" in message
 
 
 def test_format_telegram_message_prefers_copilot_practice_point() -> None:

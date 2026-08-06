@@ -37,6 +37,10 @@ SECTION_ICONS: Final[dict[Section, str]] = {
     Section.EXPORT_BUSINESS: "🌏",
 }
 
+OFFICIAL_AGENCY_LABELS: Final[dict[str, str]] = {
+    "방위사업청": "방사청",
+}
+
 PRACTICE_POINTS: Final[dict[Section, str]] = {
     Section.POLICY: "제도·예산·조달 기준 및 적용 일정 확인",
     Section.WEAPON_SYSTEM: "체계개발·시험평가·양산 일정 변동 여부 확인",
@@ -78,11 +82,11 @@ PRACTICE_POINT_RULES: Final[tuple[tuple[frozenset[str], str], ...]] = (
     ),
     (
         frozenset({"기술동맹", "전략적 파트너", "공동개발", "협력체계"}),
-        "국가·기업 간 협력 범위 및 공동개발·인증·수출 연계 확인",
+        "국가·기업 협력 범위 및 공동개발·인증·수출 연계 확인",
     ),
     (
         frozenset({"예산", "제도", "법률", "시행령", "조달"}),
-        "제도·예산·조달 기준 변경 및 진행 사업 적용 시점 확인",
+        "제도·예산·조달 변경 및 진행 사업 적용 시점 확인",
     ),
     (
         frozenset({"ai", "인공지능", "드론", "무인기", "무인체계", "자율비행", "로봇"}),
@@ -94,11 +98,11 @@ PRACTICE_POINT_RULES: Final[tuple[tuple[frozenset[str], str], ...]] = (
     ),
     (
         frozenset({"후원", "나눔", "봉사", "기부"}),
-        "방위사업 직접 관련성 및 기업 사회공헌 정보 포함 필요성 확인",
+        "방위사업 관련성 및 기업 사회공헌 정보 포함 여부 확인",
     ),
     (
         frozenset({"대통령", "대통령실", "정부", "국방장관", "국무총리"}),
-        "정부 지원·주요 직위자 발언의 후속 정책 및 사업 반영 여부 확인",
+        "정부 지원·직위자 발언의 정책·사업 반영 여부 확인",
     ),
 )
 
@@ -149,22 +153,47 @@ def format_telegram_message(
                 )
 
         if section is Section.GOVERNMENT:
-            lines.extend(["", "━━━━━━━━━━━━━━━", "", "🏛️ 국방부 / 방사청 보도자료", ""])
+            release_heading = " / ".join(
+                (
+                    f"{OFFICIAL_AGENCY_LABELS.get(release.agency, release.agency)}"
+                    f"({release.published_on.year % 100}."
+                    f"{release.published_on.month}.{release.published_on.day}.)"
+                )
+                for release in releases
+            )
+            if not release_heading:
+                release_heading = "국방부 / 방사청"
+            lines.extend(
+                [
+                    "",
+                    "━━━━━━━━━━━━━━━",
+                    "",
+                    f"🏛️ {release_heading} 보도자료",
+                    "",
+                ],
+            )
             if releases:
                 for index, release in enumerate(releases, start=1):
-                    published = release.published_on
+                    agency = OFFICIAL_AGENCY_LABELS.get(
+                        release.agency,
+                        release.agency,
+                    )
                     lines.append(
                         "".join(
                             (
-                                f"{index}. {html.escape(release.agency, quote=False)} ",
-                                f"보도자료({published.year % 100}.{published.month}.",
-                                f"{published.day}.) : ",
+                                f"{index}. {html.escape(agency, quote=False)} ",
+                                "보도자료 : ",
                                 f'<a href="{html.escape(release.url)}"><b>',
                                 f"{html.escape(release.title, quote=False)}</b></a>",
                             ),
                         ),
                     )
-                lines.extend(["", '"가장 최근의 보도자료를 수집합니다"'])
+                lines.extend(
+                    [
+                        "",
+                        '"가장 최근의 보도자료를 수집합니다"',
+                    ],
+                )
             else:
                 lines.append("수집된 공식 보도자료 없음")
 

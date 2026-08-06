@@ -172,5 +172,5 @@ class CliTest(TestCase):
 
         # Then
         assert exit_code == 0
-        assert "국방부 / 방사청 보도자료" in output.getvalue()
+        assert "국방부(26.8.5.) 보도자료" in output.getvalue()
         assert "국방부 업무보고" in output.getvalue()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from unittest import TestCase
 
 from dapa_morning_brief.briefing import build_briefing, format_telegram_message
@@ -156,7 +156,7 @@ class BriefingTest(TestCase):
         # When
         message = format_telegram_message(
             briefing,
-            today=datetime(2026, 8, 6, tzinfo=timezone.utc).date(),
+            today=date(2026, 8, 6),
             official_press_releases=(),
         )
 
@@ -164,8 +164,8 @@ class BriefingTest(TestCase):
         government_index = message.index("현 정부 / 국방부 주요 뉴스")
         official_index = message.index("국방부 / 방사청 보도자료")
         policy_index = message.index("방위사업 관련 동향")
-        self.assertLess(government_index, official_index)
-        self.assertLess(official_index, policy_index)
+        assert government_index < official_index
+        assert official_index < policy_index
 
     def test_official_press_release_section_renders_latest_board_links(self) -> None:
         # Given
@@ -175,40 +175,32 @@ class BriefingTest(TestCase):
                 agency="국방부",
                 title="국방부 업무보고",
                 url=("https://www.mnd.go.kr/bbs/mnd/13000005/DPIM_118612/artclView.do"),
-                published_on=datetime(2026, 8, 5, tzinfo=timezone.utc).date(),
+                published_on=date(2026, 8, 5),
             ),
             OfficialPressRelease(
                 agency="방위사업청",
-                title="‘대체불가 K-방산’으로의 도약",
+                title="\u2018대체불가 K-방산\u2019으로의 도약",
                 url=(
                     "https://www.dapa.go.kr/dapa/doc/selectDoc.do?"
                     "bbsSeq=326&docSeq=58959&menuSeq=3069"
                 ),
-                published_on=datetime(2026, 8, 5, tzinfo=timezone.utc).date(),
+                published_on=date(2026, 8, 5),
             ),
         )
 
         # When
         message = format_telegram_message(
             briefing,
-            today=datetime(2026, 8, 7, tzinfo=timezone.utc).date(),
+            today=date(2026, 8, 7),
             official_press_releases=releases,
         )
 
         # Then
-        self.assertIn(
-            '1. 국방부 보도자료(26.8.5.) : <a href="https://www.mnd.go.kr/'
-            + 'bbs/mnd/13000005/DPIM_118612/artclView.do"><b>국방부 '
-            + "업무보고</b></a>",
-            message,
-        )
-        self.assertIn(
-            '2. 방위사업청 보도자료(26.8.5.) : <a href="https://www.dapa.go.kr/'
-            + 'dapa/doc/selectDoc.do?bbsSeq=326&amp;docSeq=58959&amp;menuSeq=3069">'
-            + "<b>‘대체불가 K-방산’으로의 도약</b></a>",
-            message,
-        )
-        self.assertIn('"가장 최근의 보도자료를 수집합니다"', message)
+        expected_mnd = '1. 국방부 보도자료(26.8.5.) : <a href="https://www.mnd.go.kr/bbs/mnd/13000005/DPIM_118612/artclView.do"><b>국방부 업무보고</b></a>'
+        expected_dapa = '2. 방위사업청 보도자료(26.8.5.) : <a href="https://www.dapa.go.kr/dapa/doc/selectDoc.do?bbsSeq=326&amp;docSeq=58959&amp;menuSeq=3069"><b>\u2018대체불가 K-방산\u2019으로의 도약</b></a>'
+        assert expected_mnd in message
+        assert expected_dapa in message
+        assert '"가장 최근의 보도자료를 수집합니다"' in message
 
     def test_format_telegram_message_escapes_html_in_article_fields(self) -> None:
         # Given

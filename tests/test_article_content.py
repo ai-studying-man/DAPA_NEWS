@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from unittest.mock import patch
 
-from dapa_morning_brief.article_content import extract_main_text, resolve_article_url
+import httpx
+
+from dapa_morning_brief.article_content import (
+    extract_main_text,
+    fetch_article_bodies,
+    resolve_article_url,
+)
+from dapa_morning_brief.models import Article, Briefing, Section
 
 
 def test_extract_main_text_removes_navigation_and_keeps_article() -> None:
@@ -43,3 +51,49 @@ def test_resolve_article_url_decodes_google_news_link() -> None:
 
     # Then
     assert resolved == publisher_url
+
+
+def test_fetch_article_bodies_skips_sections_without_practice_points() -> None:
+    # Given
+    published = datetime(2026, 8, 6, tzinfo=UTC)
+    government = Article(
+        title="국방부 정책 발표",
+        url="https://example.com/government",
+        published_at=published,
+        source="정부뉴스",
+        section=Section.GOVERNMENT,
+    )
+    policy = Article(
+        title="방위사업 조달 정책 발표",
+        url="https://example.com/policy",
+        published_at=published,
+        source="정책뉴스",
+        section=Section.POLICY,
+    )
+    briefing = Briefing(
+        sections={
+            Section.GOVERNMENT: (government,),
+            Section.POLICY: (policy,),
+            Section.WEAPON_SYSTEM: (),
+            Section.EXPORT_BUSINESS: (),
+        },
+    )
+    response = httpx.Response(
+        200,
+        text="<article><p>방위사업 조달 정책의 적용 일정을 확정했다.</p></article>",
+        request=httpx.Request("GET", policy.url),
+    )
+
+    # When
+    with (
+        patch.object(httpx.Client, "get", return_value=response) as get,
+        patch(
+            "dapa_morning_brief.article_content.extract_main_text",
+            return_value="방위사업 조달 정책의 적용 일정을 확정했다.",
+        ),
+    ):
+        bodies = fetch_article_bodies(briefing)
+
+    # Then
+    assert [body.article_url for body in bodies] == [policy.url]
+    assert get.call_count == 1

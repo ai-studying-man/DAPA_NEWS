@@ -331,6 +331,37 @@ def test_build_briefing_collapses_same_corporate_ownership_event() -> None:
     assert len(selected) == 2
 
 
+def test_build_briefing_collapses_cyber_gambling_self_report_coverage() -> None:
+    # Given
+    published = datetime(2026, 8, 6, 6, 0, tzinfo=UTC)
+    articles = [
+        _article(
+            "군대 내 사이버도박 심각…국방부, 장병 자진신고제 검토",
+            "KNN",
+            Section.GOVERNMENT,
+            published,
+        ),
+        _article(
+            "쉽게 도박하고 빚쟁이 되는 군인들…국방부, 자진신고제 검토",
+            "YTN",
+            Section.GOVERNMENT,
+            published,
+        ),
+        _article(
+            "군대서 사이버도박하다 빚더미 전역…국방부, 자진신고제 검토",
+            "연합뉴스",
+            Section.GOVERNMENT,
+            published,
+        ),
+    ]
+
+    # When
+    briefing = build_briefing(articles, max_per_section=5)
+
+    # Then
+    assert len(briefing.sections[Section.GOVERNMENT]) == 1
+
+
 def _article(
     title: str,
     source: str,

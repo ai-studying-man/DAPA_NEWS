@@ -31,6 +31,14 @@ SECTION_DISPLAY_TITLES: Final[dict[Section, str]] = {
     Section.EXPORT_BUSINESS: "방산수출·기업동향",
 }
 
+PRACTICE_POINT_SECTIONS: Final[frozenset[Section]] = frozenset(
+    {
+        Section.POLICY,
+        Section.WEAPON_SYSTEM,
+        Section.EXPORT_BUSINESS,
+    },
+)
+
 
 @dataclass(frozen=True, slots=True)
 class Article:

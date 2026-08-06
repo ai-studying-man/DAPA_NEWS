@@ -15,7 +15,7 @@ from dapa_morning_brief.article_content import fetch_article_bodies
 from dapa_morning_brief.briefing import build_briefing, format_telegram_message
 from dapa_morning_brief.collector import collect_articles
 from dapa_morning_brief.copilot_summary import summarize_article_bodies
-from dapa_morning_brief.models import Section
+from dapa_morning_brief.models import PRACTICE_POINT_SECTIONS, Section
 from dapa_morning_brief.telegram import (
     TelegramSendError,
     parse_chat_ids,
@@ -80,7 +80,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not args.dry_run:
         article_bodies = fetch_article_bodies(briefing)
         practice_points = summarize_article_bodies(article_bodies)
-        selected_count = sum(len(items) for items in briefing.sections.values())
+        selected_count = sum(
+            len(briefing.sections[section]) for section in PRACTICE_POINT_SECTIONS
+        )
         _ = sys.stderr.write(
             COPILOT_SUMMARY_TEMPLATE.format(
                 generated=len(practice_points),

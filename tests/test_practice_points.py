@@ -65,12 +65,12 @@ def test_format_telegram_message_uses_article_specific_practice_points() -> None
     )
 
     # Then
-    assert "국방규격·지식재산권 반영 여부와 분쟁 영향을 확인할 필요." in message
-    assert "클러스터 참여기관·지원사업·지역별 추진 일정을 확인할 필요." in message
-    assert "시험평가·인증 결과와 후속 양산 일정 영향을 확인할 필요." in message
-    assert "법안의 적용 대상·시행 시점과 기존 사업 영향 여부를 확인할 필요." in message
-    assert "국가·기업 간 협력 범위와 공동개발·인증·수출 연계를 확인할 필요." in message
-    assert "기업 사회공헌 정보의 포함 필요성을 재확인할 필요." in message
+    assert "국방규격·지식재산권 반영 및 분쟁 영향 확인" in message
+    assert "클러스터 참여기관·지원사업·지역별 추진 일정 확인" in message
+    assert "시험평가·인증 결과 및 후속 양산 일정 영향 확인" in message
+    assert "법안 적용 대상·시행 시점 및 기존 사업 영향 확인" in message
+    assert "국가·기업 간 협력 범위 및 공동개발·인증·수출 연계 확인" in message
+    assert "방위사업 직접 관련성 및 기업 사회공헌 정보 포함 필요성 확인" in message
 
 
 def test_format_telegram_message_prefers_copilot_practice_point() -> None:
@@ -85,7 +85,7 @@ def test_format_telegram_message_prefers_copilot_practice_point() -> None:
     briefing = build_briefing([article], max_per_section=1)
     copilot_point = PracticePoint(
         article_url=article.url,
-        text="후속 양산 계약 시점과 납품 일정을 확인할 필요가 있음.",
+        text="후속 양산 계약 시점 및 납품 일정 확인",
     )
 
     # When
@@ -97,3 +97,49 @@ def test_format_telegram_message_prefers_copilot_practice_point() -> None:
 
     # Then
     assert copilot_point.text in message
+
+
+def test_practice_points_are_omitted_from_government_news() -> None:
+    # Given
+    published = datetime(2026, 8, 6, tzinfo=UTC)
+    government = Article(
+        title="국방부 장병 지원대책 발표",
+        url="https://example.com/government",
+        published_at=published,
+        source="정부뉴스",
+        section=Section.GOVERNMENT,
+    )
+    policy = Article(
+        title="방위사업청 조달제도 개선",
+        url="https://example.com/policy",
+        published_at=published,
+        source="정책뉴스",
+        section=Section.POLICY,
+    )
+    briefing = build_briefing([government, policy], max_per_section=1)
+
+    # When
+    message = format_telegram_message(briefing, today=published.date())
+
+    # Then
+    assert message.count("📌 실무 참고:") == 1
+    assert message.index("방위사업청 조달제도 개선") < message.index("📌 실무 참고:")
+
+
+def test_keyword_practice_point_ends_as_nominal_phrase() -> None:
+    # Given
+    published = datetime(2026, 8, 6, tzinfo=UTC)
+    article = Article(
+        title="AI 무인체계 운용지침 개정",
+        url="https://example.com/ai-policy",
+        published_at=published,
+        source="정책뉴스",
+        section=Section.POLICY,
+    )
+    briefing = build_briefing([article], max_per_section=1)
+
+    # When
+    message = format_telegram_message(briefing, today=published.date())
+
+    # Then
+    assert "📌 실무 참고: AI·무인체계 운용 보안 및 정책·규제 준수 여부 확인" in message

@@ -46,6 +46,7 @@ EVENT_ACTION_TOKENS: Final[frozenset[str]] = frozenset(
         "구축",
         "협약",
         "업무협약",
+        "검토",
     },
 )
 EVENT_CONTEXT_TOKEN_GROUPS: Final[tuple[frozenset[str], ...]] = (

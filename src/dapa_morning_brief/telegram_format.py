@@ -5,7 +5,7 @@ from __future__ import annotations
 import html
 from typing import TYPE_CHECKING, Final
 
-from dapa_morning_brief.models import Article, Section
+from dapa_morning_brief.models import PRACTICE_POINT_SECTIONS, Article, Section
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -38,68 +38,67 @@ SECTION_ICONS: Final[dict[Section, str]] = {
 }
 
 PRACTICE_POINTS: Final[dict[Section, str]] = {
-    Section.GOVERNMENT: "대통령·국방부·군 주요 직위자 발언의 사업 영향 확인 필요.",
-    Section.POLICY: "관련 제도, 예산, 조달 일정의 실무 영향 확인 필요.",
-    Section.WEAPON_SYSTEM: "체계개발, 시험평가, 양산 일정 변동 여부 확인 필요.",
-    Section.EXPORT_BUSINESS: "수출 계약, 공급망, 업체별 사업 영향 확인 필요.",
+    Section.POLICY: "제도·예산·조달 기준 및 적용 일정 확인",
+    Section.WEAPON_SYSTEM: "체계개발·시험평가·양산 일정 변동 여부 확인",
+    Section.EXPORT_BUSINESS: "수출 계약·공급망·업체별 사업 영향 확인",
 }
 
 PRACTICE_POINT_RULES: Final[tuple[tuple[frozenset[str], str], ...]] = (
     (
         frozenset({"국방규격", "특허", "지식재산"}),
-        "국방규격·지식재산권 반영 여부와 분쟁 영향을 확인할 필요.",
+        "국방규격·지식재산권 반영 및 분쟁 영향 확인",
     ),
     (
         frozenset({"방산혁신클러스터", "방산혁신단지", "클러스터"}),
-        "클러스터 참여기관·지원사업·지역별 추진 일정을 확인할 필요.",
+        "클러스터 참여기관·지원사업·지역별 추진 일정 확인",
     ),
     (
         frozenset({"인수", "지분", "매각", "출자"}),
-        "지분·인수·매각 논의가 사업 수행체계에 미치는 영향을 확인할 필요.",
+        "지분·인수·매각 논의의 사업 수행체계 영향 확인",
     ),
     (
         frozenset({"대표발의", "법안", "개정안", "입법"}),
-        "법안의 적용 대상·시행 시점과 기존 사업 영향 여부를 확인할 필요.",
+        "법안 적용 대상·시행 시점 및 기존 사업 영향 확인",
     ),
     (
         frozenset({"시험평가", "성능검증", "품질인증", "인증 획득"}),
-        "시험평가·인증 결과와 후속 양산 일정 영향을 확인할 필요.",
+        "시험평가·인증 결과 및 후속 양산 일정 영향 확인",
     ),
     (
         frozenset({"양산", "전력화", "납품", "배치"}),
-        "양산·전력화·납품 일정과 물량 변동 여부를 확인할 필요.",
+        "양산·전력화·납품 일정 및 물량 변동 여부 확인",
     ),
     (
         frozenset({"공급망", "핵심부품", "소재·부품", "부품 국산화"}),
-        "핵심 소재·부품 공급망과 대체조달·납기 위험을 확인할 필요.",
+        "핵심 소재·부품 공급망 및 대체조달·납기 위험 확인",
     ),
     (
         frozenset({"수출", "수주", "계약", "협상", "절충교역"}),
-        "수출 계약·협상 조건과 현지화·후속지원 일정을 확인할 필요.",
+        "수출 계약·협상 조건 및 현지화·후속지원 일정 확인",
     ),
     (
         frozenset({"기술동맹", "전략적 파트너", "공동개발", "협력체계"}),
-        "국가·기업 간 협력 범위와 공동개발·인증·수출 연계를 확인할 필요.",
+        "국가·기업 간 협력 범위 및 공동개발·인증·수출 연계 확인",
     ),
     (
         frozenset({"예산", "제도", "법률", "시행령", "조달"}),
-        "제도·예산·조달 기준 변경과 진행 사업 적용 시점을 확인할 필요.",
+        "제도·예산·조달 기준 변경 및 진행 사업 적용 시점 확인",
     ),
     (
         frozenset({"ai", "인공지능", "드론", "무인기", "무인체계", "자율비행", "로봇"}),
-        "AI·무인체계 적용 범위와 시험·인증·보안 요구사항을 확인할 필요.",
+        "AI·무인체계 운용 보안 및 정책·규제 준수 여부 확인",
     ),
     (
         frozenset({"전차", "전투기", "함정", "잠수함", "미사일", "소총", "개인화기"}),
-        "대상 무기체계의 요구성능·도입 일정·경쟁 구도 변화를 확인할 필요.",
+        "대상 무기체계 요구성능·도입 일정·경쟁 구도 변화 확인",
     ),
     (
         frozenset({"후원", "나눔", "봉사", "기부"}),
-        "방위사업 직접 관련성과 기업 사회공헌 정보의 포함 필요성을 재확인할 필요.",
+        "방위사업 직접 관련성 및 기업 사회공헌 정보 포함 필요성 확인",
     ),
     (
         frozenset({"대통령", "대통령실", "정부", "국방장관", "국무총리"}),
-        "정부 지원·주요 직위자 발언의 후속 정책과 사업 반영 여부를 확인할 필요.",
+        "정부 지원·주요 직위자 발언의 후속 정책 및 사업 반영 여부 확인",
     ),
 )
 
@@ -130,13 +129,16 @@ def format_telegram_message(
             if not articles:
                 lines.append("수집 기사 없음")
             for index, article in enumerate(articles, start=1):
-                practice_point = generated_points.get(
-                    article.url, _practice_point(article)
-                )
+                lines.append(f"{index}. {html.escape(article.title, quote=False)}")
+                if section in PRACTICE_POINT_SECTIONS:
+                    practice_point = generated_points.get(
+                        article.url, _practice_point(article)
+                    )
+                    lines.append(
+                        f"📌 실무 참고: {html.escape(practice_point, quote=False)}"
+                    )
                 lines.extend(
                     [
-                        f"{index}. {html.escape(article.title, quote=False)}",
-                        f"📌 실무 참고: {html.escape(practice_point, quote=False)}",
                         (
                             "🔗 "
                             f'<a href="{html.escape(article.url)}">'

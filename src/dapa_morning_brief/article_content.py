@@ -11,6 +11,7 @@ from googlenewsdecoder import gnewsdecoder
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from dapa_morning_brief.copilot_summary import ArticleBody
+from dapa_morning_brief.models import PRACTICE_POINT_SECTIONS
 from dapa_morning_brief.source_config import USER_AGENT
 
 if TYPE_CHECKING:
@@ -67,7 +68,9 @@ def fetch_article_bodies(briefing: Briefing) -> tuple[ArticleBody, ...]:
         follow_redirects=True,
         headers=headers,
     ) as client:
-        for articles in briefing.sections.values():
+        for section, articles in briefing.sections.items():
+            if section not in PRACTICE_POINT_SECTIONS:
+                continue
             for article in articles:
                 try:
                     response = client.get(resolve_article_url(article.url))

@@ -23,7 +23,7 @@ def test_parse_copilot_output_returns_typed_practice_points() -> None:
     # Then
     assert len(points) == 1
     assert points[0].article_url == "https://example.com/a"
-    assert points[0].text == "계약 일정과 후속 조달 영향을 확인할 필요가 있음."
+    assert points[0].text == "계약 일정과 후속 조달 영향 확인"
 
 
 def test_parse_copilot_output_rejects_invalid_json() -> None:

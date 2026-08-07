@@ -43,15 +43,6 @@ class _HtmlCell:
     onclick: str | None
 
 
-@dataclass(frozen=True, slots=True)
-class _PressReleaseCollectionError(RuntimeError):
-    agency: str
-
-    @override
-    def __str__(self) -> str:
-        return f"{self.agency} 최신 보도자료를 수집하지 못했습니다."
-
-
 class _BoardTableParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -233,7 +224,6 @@ def _collect_with_client(
             release for release in cached if release.agency == agency
         )
         latest = select_latest_press_release(candidates, as_of=as_of)
-        if latest is None:
-            raise _PressReleaseCollectionError(agency=agency)
-        collected.append(latest)
+        if latest is not None:
+            collected.append(latest)
     return tuple(collected)

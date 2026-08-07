@@ -148,7 +148,7 @@ class BriefingTest(TestCase):
             in message
         )
 
-    def test_official_press_release_section_follows_government_news(self) -> None:
+    def test_official_press_release_section_is_omitted_when_unavailable(self) -> None:
         # Given
         briefing = build_briefing([], max_per_section=3)
 
@@ -160,11 +160,8 @@ class BriefingTest(TestCase):
         )
 
         # Then
-        government_index = message.index("현 정부 / 국방부 주요 뉴스")
-        official_index = message.index("국방부 / 방사청 보도자료")
-        policy_index = message.index("방위사업 관련 동향")
-        assert government_index < official_index
-        assert official_index < policy_index
+        assert "국방부 / 방사청 보도자료" not in message
+        assert "수집된 공식 보도자료 없음" not in message
 
     def test_official_press_release_section_renders_latest_board_links(self) -> None:
         # Given

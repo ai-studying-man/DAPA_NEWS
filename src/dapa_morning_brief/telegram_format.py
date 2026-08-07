@@ -152,7 +152,7 @@ def format_telegram_message(
                     ],
                 )
 
-        if section is Section.GOVERNMENT:
+        if section is Section.GOVERNMENT and releases:
             release_heading = " / ".join(
                 (
                     f"{OFFICIAL_AGENCY_LABELS.get(release.agency, release.agency)}"
@@ -161,8 +161,6 @@ def format_telegram_message(
                 )
                 for release in releases
             )
-            if not release_heading:
-                release_heading = "국방부 / 방사청"
             lines.extend(
                 [
                     "",
@@ -172,30 +170,27 @@ def format_telegram_message(
                     "",
                 ],
             )
-            if releases:
-                for index, release in enumerate(releases, start=1):
-                    agency = OFFICIAL_AGENCY_LABELS.get(
-                        release.agency,
-                        release.agency,
-                    )
-                    lines.append(
-                        "".join(
-                            (
-                                f"{index}. {html.escape(agency, quote=False)} ",
-                                "보도자료 : ",
-                                f'<a href="{html.escape(release.url)}"><b>',
-                                f"{html.escape(release.title, quote=False)}</b></a>",
-                            ),
-                        ),
-                    )
-                lines.extend(
-                    [
-                        "",
-                        '"가장 최근의 보도자료 1건을 수집합니다"',
-                    ],
+            for index, release in enumerate(releases, start=1):
+                agency = OFFICIAL_AGENCY_LABELS.get(
+                    release.agency,
+                    release.agency,
                 )
-            else:
-                lines.append("수집된 공식 보도자료 없음")
+                lines.append(
+                    "".join(
+                        (
+                            f"{index}. {html.escape(agency, quote=False)} ",
+                            "보도자료 : ",
+                            f'<a href="{html.escape(release.url)}"><b>',
+                            f"{html.escape(release.title, quote=False)}</b></a>",
+                        ),
+                    ),
+                )
+            lines.extend(
+                [
+                    "",
+                    '"가장 최근의 보도자료 1건을 수집합니다"',
+                ],
+            )
 
     lines.extend(
         [

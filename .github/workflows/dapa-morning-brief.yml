@@ -2,7 +2,6 @@ name: DAPA Morning Brief
 
 on:
   schedule:
-    - cron: "30,45 20 * * *"
     - cron: "0,15,30 21 * * *"
   repository_dispatch:
     types: [dapa-morning-brief]
@@ -28,33 +27,22 @@ jobs:
       DAPA_PRESS_RELEASE_CACHE: .dapa-state/latest-press-releases.json
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - uses: astral-sh/setup-uv@v5
-      - run: uv sync
       - id: kst-date
         run: echo "today=$(TZ=Asia/Seoul date +%F)" >> "$GITHUB_OUTPUT"
-      - id: send-window
-        if: github.event_name == 'schedule'
-        run: |
-          now_epoch=$(TZ=Asia/Seoul date +%s)
-          target_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 06:30:00" +%s)
-
-          if [ "$now_epoch" -lt "$target_epoch" ]; then
-            sleep_seconds=$((target_epoch - now_epoch))
-            echo "Waiting ${sleep_seconds}s for 06:30 KST send window."
-            sleep "$sleep_seconds"
-          else
-            echo "GitHub started after 06:30 KST; sending now."
-          fi
-          echo "should_send=true" >> "$GITHUB_OUTPUT"
       - id: sent-cache
         if: github.event_name == 'schedule'
         uses: actions/cache/restore@v4
         with:
           path: .dapa-sent
           key: dapa-morning-brief-${{ steps.kst-date.outputs.today }}
+      - uses: actions/setup-python@v5
+        if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v5
+        if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
+      - if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
+        run: uv sync
       - id: press-release-cache
         if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
         uses: actions/cache/restore@v4
@@ -63,27 +51,60 @@ jobs:
           key: dapa-press-releases-${{ steps.kst-date.outputs.today }}
           restore-keys: |
             dapa-press-releases-
+      - name: Bootstrap official press release cache
+        if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .dapa-state
+          if [ ! -s "$DAPA_PRESS_RELEASE_CACHE" ]; then
+            cp data/initial-press-releases.json "$DAPA_PRESS_RELEASE_CACHE"
+          fi
       - name: Install Copilot CLI
-        if: github.event_name != 'schedule' || (steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true')
+        if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         run: npm install -g @github/copilot
-      - name: Send Telegram brief
-        if: github.event_name != 'schedule' || (steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true')
+      - name: Prepare complete morning brief
+        id: prepare
+        if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: uv run python -m dapa_morning_brief.cli --days 1 --fallback-days 2
+        run: >-
+          uv run python -m dapa_morning_brief.cli
+          --days 1 --fallback-days 2
+          --prepare-output .dapa-prepared/morning-brief.json
       - name: Save latest official press releases
-        if: github.event_name == 'schedule' && steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true' && success()
+        if: github.event_name == 'schedule' && steps.sent-cache.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success' && steps.press-release-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
         uses: actions/cache/save@v4
         with:
           path: .dapa-state
           key: dapa-press-releases-${{ steps.kst-date.outputs.today }}
+      - id: send-window
+        if: github.event_name == 'schedule' && steps.sent-cache.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
+        run: |
+          now_epoch=$(TZ=Asia/Seoul date +%s)
+          target_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 06:30:00" +%s)
+
+          if [ "$now_epoch" -lt "$target_epoch" ]; then
+            sleep_seconds=$((target_epoch - now_epoch))
+            echo "Brief prepared. Waiting ${sleep_seconds}s for 06:30 KST."
+            sleep "$sleep_seconds"
+          else
+            echo "Preparation completed after 06:30 KST; sending now."
+          fi
+          echo "should_send=true" >> "$GITHUB_OUTPUT"
+      - name: Send prepared Telegram brief
+        id: telegram_send
+        if: github.event_name != 'schedule' || (steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true')
+        run: >-
+          uv run python -m dapa_morning_brief.cli
+          --prepared-input .dapa-prepared/morning-brief.json
       - name: Mark scheduled brief sent
-        if: github.event_name == 'schedule' && steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true' && success()
+        id: mark_sent
+        if: github.event_name == 'schedule' && steps.telegram_send.outcome == 'success'
         run: |
           mkdir -p .dapa-sent
           echo "${{ steps.kst-date.outputs.today }}" > ".dapa-sent/${{ steps.kst-date.outputs.today }}"
-      - if: github.event_name == 'schedule' && steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true' && success()
+      - if: github.event_name == 'schedule' && steps.mark_sent.outcome == 'success'
         uses: actions/cache/save@v4
         with:
           path: .dapa-sent

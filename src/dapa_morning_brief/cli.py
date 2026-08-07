@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from io import TextIOWrapper
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
@@ -17,6 +17,7 @@ from dapa_morning_brief.briefing import build_briefing, format_telegram_message
 from dapa_morning_brief.collector import collect_articles
 from dapa_morning_brief.copilot_summary import summarize_article_bodies
 from dapa_morning_brief.models import PRACTICE_POINT_SECTIONS, Section
+from dapa_morning_brief.prepared_brief import PreparedBrief
 from dapa_morning_brief.telegram import (
     TelegramSendError,
     parse_chat_ids,
@@ -33,6 +34,7 @@ COPILOT_SUMMARY_TEMPLATE: Final = (
     "Copilot summary: generated={generated} fallback={fallback} bodies={bodies}\n"
 )
 PRESS_RELEASE_CACHE_ENV: Final = "DAPA_PRESS_RELEASE_CACHE"
+PREPARED_BRIEF_TEMPLATE: Final = "Prepared brief saved: {path}\n"
 
 
 class BriefNamespace(argparse.Namespace):
@@ -46,6 +48,8 @@ class BriefNamespace(argparse.Namespace):
     dry_run: bool = False
     telegram_token: str | None = None
     telegram_chat_id: str | None = None
+    prepare_output: Path | None = None
+    prepared_input: Path | None = None
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -53,6 +57,33 @@ def main(argv: Sequence[str] | None = None) -> int:
     _configure_stdio()
     args = BriefNamespace()
     _ = _parser().parse_args(argv, namespace=args)
+    today = datetime.now(KST).date()
+    if args.prepared_input is not None:
+        return _send_prepared(args, today=today, path=args.prepared_input)
+
+    prepared = _prepare_brief(
+        args,
+        today=today,
+        generate_practice_points=not args.dry_run,
+    )
+    if args.prepare_output is not None:
+        prepared.save(args.prepare_output)
+        _ = sys.stderr.write(
+            PREPARED_BRIEF_TEMPLATE.format(path=args.prepare_output),
+        )
+        return 0
+    if args.dry_run:
+        _ = sys.stdout.write(f"{prepared.message}\n")
+        return 0
+    return _send_text(args, prepared.message)
+
+
+def _prepare_brief(
+    args: BriefNamespace,
+    *,
+    today: date,
+    generate_practice_points: bool,
+) -> PreparedBrief:
     days = args.days
     max_per_section = args.max_per_section
     articles = collect_articles(
@@ -74,19 +105,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
     briefing = build_briefing(articles, max_per_section=max_per_section)
-    today = datetime.now(KST).date()
     raw_cache_path = os.getenv(PRESS_RELEASE_CACHE_ENV, "")
     latest_press_releases = official_press_releases.collect_latest_press_releases(
         as_of=today,
         cache_path=Path(raw_cache_path) if raw_cache_path else None,
     )
     practice_points = ()
-    if not args.dry_run:
+    selected_count = sum(
+        len(briefing.sections[section]) for section in PRACTICE_POINT_SECTIONS
+    )
+    if generate_practice_points:
         article_bodies = fetch_article_bodies(briefing)
         practice_points = summarize_article_bodies(article_bodies)
-        selected_count = sum(
-            len(briefing.sections[section]) for section in PRACTICE_POINT_SECTIONS
-        )
         _ = sys.stderr.write(
             COPILOT_SUMMARY_TEMPLATE.format(
                 generated=len(practice_points),
@@ -100,11 +130,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         practice_points=practice_points,
         official_press_releases=latest_press_releases,
     )
+    return PreparedBrief(
+        briefing_date=today,
+        message=message,
+        generated_practice_points=len(practice_points),
+        fallback_practice_points=(
+            selected_count - len(practice_points) if generate_practice_points else 0
+        ),
+    )
 
+
+def _send_prepared(args: BriefNamespace, *, today: date, path: Path) -> int:
+    prepared = PreparedBrief.load(path)
+    if prepared.briefing_date != today:
+        _ = sys.stderr.write(
+            f"Prepared brief date mismatch: {prepared.briefing_date} != {today}.\n",
+        )
+        return 2
     if args.dry_run:
-        _ = sys.stdout.write(f"{message}\n")
+        _ = sys.stdout.write(f"{prepared.message}\n")
         return 0
+    return _send_text(args, prepared.message)
 
+
+def _send_text(args: BriefNamespace, message: str) -> int:
     token = args.telegram_token or os.getenv("TELEGRAM_BOT_TOKEN", "")
     raw_chat_ids = (
         args.telegram_chat_id
@@ -148,6 +197,9 @@ def _parser() -> argparse.ArgumentParser:
     _ = parser.add_argument("--dry-run", action="store_true")
     _ = parser.add_argument("--telegram-token")
     _ = parser.add_argument("--telegram-chat-id")
+    delivery = parser.add_mutually_exclusive_group()
+    _ = delivery.add_argument("--prepare-output", type=Path)
+    _ = delivery.add_argument("--prepared-input", type=Path)
     return parser
 
 

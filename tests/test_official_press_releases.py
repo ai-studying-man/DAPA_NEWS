@@ -1,14 +1,10 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import httpx
-import pytest
 from pydantic import TypeAdapter
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from dapa_morning_brief.models import OfficialPressRelease
 from dapa_morning_brief.official_press_releases import (
@@ -17,6 +13,19 @@ from dapa_morning_brief.official_press_releases import (
     parse_mnd_press_releases,
     select_latest_press_release,
 )
+from dapa_morning_brief.press_release_cache import load_cached_press_releases
+
+
+def test_initial_press_release_cache_contains_both_verified_agencies() -> None:
+    # Given
+    seed_path = Path("data/initial-press-releases.json")
+
+    # When
+    releases = load_cached_press_releases(seed_path)
+
+    # Then
+    assert [release.agency for release in releases] == ["국방부", "방위사업청"]
+    assert all(release.published_on == date(2026, 8, 5) for release in releases)
 
 
 def test_parse_dapa_press_releases_builds_direct_detail_link() -> None:
@@ -169,17 +178,17 @@ def test_collect_latest_press_releases_returns_one_per_official_board(
     )
 
 
-def test_collect_latest_press_releases_rejects_incomplete_results() -> None:
+def test_collect_latest_press_releases_does_not_block_brief_without_cache() -> None:
     # Given
     def fail(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(503)
 
-    # When / Then
-    with (
-        httpx.Client(transport=httpx.MockTransport(fail)) as client,
-        pytest.raises(RuntimeError, match="국방부"),
-    ):
-        _ = collect_latest_press_releases(
+    # When
+    with httpx.Client(transport=httpx.MockTransport(fail)) as client:
+        releases = collect_latest_press_releases(
             as_of=date(2026, 8, 7),
             client=client,
         )
+
+    # Then
+    assert releases == ()

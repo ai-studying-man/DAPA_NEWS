@@ -13,10 +13,15 @@ import httpx
 from typing_extensions import override
 
 from dapa_morning_brief.models import OfficialPressRelease
+from dapa_morning_brief.press_release_cache import (
+    load_cached_press_releases,
+    save_cached_press_releases,
+)
 from dapa_morning_brief.source_config import USER_AGENT
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from pathlib import Path
 
 _DAPA_DETAIL_URL: Final[str] = "https://www.dapa.go.kr/dapa/doc/selectDoc.do"
 _DAPA_LIST_URL: Final[str] = (
@@ -36,6 +41,15 @@ class _HtmlCell:
     text: str
     href: str | None
     onclick: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _PressReleaseCollectionError(RuntimeError):
+    agency: str
+
+    @override
+    def __str__(self) -> str:
+        return f"{self.agency} 최신 보도자료를 수집하지 못했습니다."
 
 
 class _BoardTableParser(HTMLParser):
@@ -168,10 +182,15 @@ def collect_latest_press_releases(
     *,
     as_of: date,
     client: httpx.Client | None = None,
+    cache_path: Path | None = None,
 ) -> tuple[OfficialPressRelease, ...]:
     """Collect the newest available release from each official board."""
+    cached = load_cached_press_releases(cache_path) if cache_path is not None else ()
     if client is not None:
-        return _collect_with_client(client, as_of=as_of)
+        collected = _collect_with_client(client, as_of=as_of, cached=cached)
+        if cache_path is not None:
+            save_cached_press_releases(cache_path, collected)
+        return collected
 
     timeout = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=10.0)
     limits = httpx.Limits(
@@ -186,26 +205,35 @@ def collect_latest_press_releases(
         follow_redirects=True,
         headers={"User-Agent": USER_AGENT},
     ) as owned_client:
-        return _collect_with_client(owned_client, as_of=as_of)
+        collected = _collect_with_client(owned_client, as_of=as_of, cached=cached)
+    if cache_path is not None:
+        save_cached_press_releases(cache_path, collected)
+    return collected
 
 
 def _collect_with_client(
     client: httpx.Client,
     *,
     as_of: date,
+    cached: tuple[OfficialPressRelease, ...],
 ) -> tuple[OfficialPressRelease, ...]:
     collected: list[OfficialPressRelease] = []
     sources = (
-        (_MND_LIST_URL, parse_mnd_press_releases),
-        (_DAPA_LIST_URL, parse_dapa_press_releases),
+        ("국방부", _MND_LIST_URL, parse_mnd_press_releases),
+        ("방위사업청", _DAPA_LIST_URL, parse_dapa_press_releases),
     )
-    for url, parser in sources:
+    for agency, url, parser in sources:
         try:
             response = client.get(url)
             _ = response.raise_for_status()
-            latest = select_latest_press_release(parser(response.text), as_of=as_of)
+            current = parser(response.text)
         except (httpx.HTTPError, ValueError):
-            continue
-        if latest is not None:
-            collected.append(latest)
+            current = ()
+        candidates = current + tuple(
+            release for release in cached if release.agency == agency
+        )
+        latest = select_latest_press_release(candidates, as_of=as_of)
+        if latest is None:
+            raise _PressReleaseCollectionError(agency=agency)
+        collected.append(latest)
     return tuple(collected)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from io import StringIO
+from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -18,6 +19,30 @@ from dapa_morning_brief.models import (
 
 
 class CliTest(TestCase):
+    def test_cli_uses_persistent_press_release_cache_when_configured(self) -> None:
+        # Given
+        output = StringIO()
+        cache_path = Path(".dapa-state/latest-press-releases.json")
+
+        # When
+        with (
+            patch("dapa_morning_brief.cli.collect_articles", return_value=[]),
+            patch(
+                "dapa_morning_brief.official_press_releases.collect_latest_press_releases",
+                return_value=(),
+            ) as collect,
+            patch.dict(
+                "os.environ",
+                {"DAPA_PRESS_RELEASE_CACHE": str(cache_path)},
+            ),
+            patch("sys.stdout", output),
+        ):
+            exit_code = main(["--dry-run"])
+
+        # Then
+        assert exit_code == 0
+        assert collect.call_args.kwargs["cache_path"] == cache_path
+
     def test_cli_defaults_to_daily_freshness_window(self) -> None:
         # Given
         daily_window_days = 1

@@ -7,6 +7,7 @@ import os
 import sys
 from datetime import datetime
 from io import TextIOWrapper
+from pathlib import Path
 from typing import TYPE_CHECKING, Final
 from zoneinfo import ZoneInfo
 
@@ -31,6 +32,7 @@ KST: Final[ZoneInfo] = ZoneInfo("Asia/Seoul")
 COPILOT_SUMMARY_TEMPLATE: Final = (
     "Copilot summary: generated={generated} fallback={fallback} bodies={bodies}\n"
 )
+PRESS_RELEASE_CACHE_ENV: Final = "DAPA_PRESS_RELEASE_CACHE"
 
 
 class BriefNamespace(argparse.Namespace):
@@ -73,8 +75,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     briefing = build_briefing(articles, max_per_section=max_per_section)
     today = datetime.now(KST).date()
+    raw_cache_path = os.getenv(PRESS_RELEASE_CACHE_ENV, "")
     latest_press_releases = official_press_releases.collect_latest_press_releases(
         as_of=today,
+        cache_path=Path(raw_cache_path) if raw_cache_path else None,
     )
     practice_points = ()
     if not args.dry_run:

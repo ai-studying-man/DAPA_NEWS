@@ -191,7 +191,7 @@ def format_telegram_message(
                 lines.extend(
                     [
                         "",
-                        '"가장 최근의 보도자료를 수집합니다"',
+                        '"가장 최근의 보도자료 1건을 수집합니다"',
                     ],
                 )
             else:

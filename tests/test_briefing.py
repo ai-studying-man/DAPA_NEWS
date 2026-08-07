@@ -208,7 +208,7 @@ class BriefingTest(TestCase):
         assert heading in message
         assert expected_mnd in message
         assert expected_dapa in message
-        assert '"가장 최근의 보도자료를 수집합니다"' in message
+        assert '"가장 최근의 보도자료 1건을 수집합니다"' in message
 
     def test_format_telegram_message_escapes_html_in_article_fields(self) -> None:
         # Given

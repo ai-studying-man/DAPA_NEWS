@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import TYPE_CHECKING
 
 import httpx
+import pytest
+from pydantic import TypeAdapter
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from dapa_morning_brief.models import OfficialPressRelease
 from dapa_morning_brief.official_press_releases import (
@@ -95,7 +101,9 @@ def test_select_latest_press_release_keeps_latest_before_as_of_date() -> None:
     assert latest == releases[1]
 
 
-def test_collect_latest_press_releases_returns_one_per_official_board() -> None:
+def test_collect_latest_press_releases_returns_one_per_official_board(
+    tmp_path: Path,
+) -> None:
     # Given
     documents = {
         "https://www.mnd.go.kr/mnd/167/subview.do": (
@@ -114,11 +122,26 @@ def test_collect_latest_press_releases_returns_one_per_official_board() -> None:
         return httpx.Response(200, text=documents[str(request.url)])
 
     # When
+    cache_path = tmp_path / "latest-press-releases.json"
     with httpx.Client(transport=httpx.MockTransport(respond)) as client:
         releases = collect_latest_press_releases(
             as_of=date(2026, 8, 7),
             client=client,
+            cache_path=cache_path,
         )
+
+    def fail(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503)
+
+    with httpx.Client(transport=httpx.MockTransport(fail)) as client:
+        cached_releases = collect_latest_press_releases(
+            as_of=date(2026, 8, 7),
+            client=client,
+            cache_path=cache_path,
+        )
+    cache_payload = TypeAdapter(tuple[dict[str, str], ...]).validate_json(
+        cache_path.read_bytes()
+    )
 
     # Then
     assert [release.agency for release in releases] == ["국방부", "방위사업청"]
@@ -126,3 +149,37 @@ def test_collect_latest_press_releases_returns_one_per_official_board() -> None:
         date(2026, 8, 5),
         date(2026, 8, 5),
     ]
+    assert cached_releases == releases
+    assert cache_payload == (
+        {
+            "agency": "국방부",
+            "title": "국방부 업무보고",
+            "url": ("https://www.mnd.go.kr/bbs/mnd/13000005/DPIM_118612/artclView.do"),
+            "published_on": "2026-08-05",
+        },
+        {
+            "agency": "방위사업청",
+            "title": "\u2018대체불가 K-방산\u2019으로의 도약",
+            "url": (
+                "https://www.dapa.go.kr/dapa/doc/selectDoc.do?"
+                "bbsSeq=326&docSeq=58959&menuSeq=3069"
+            ),
+            "published_on": "2026-08-05",
+        },
+    )
+
+
+def test_collect_latest_press_releases_rejects_incomplete_results() -> None:
+    # Given
+    def fail(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503)
+
+    # When / Then
+    with (
+        httpx.Client(transport=httpx.MockTransport(fail)) as client,
+        pytest.raises(RuntimeError, match="국방부"),
+    ):
+        _ = collect_latest_press_releases(
+            as_of=date(2026, 8, 7),
+            client=client,
+        )

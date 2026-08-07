@@ -2,7 +2,8 @@ name: DAPA Morning Brief
 
 on:
   schedule:
-    - cron: "15,35,55 21 * * *"
+    - cron: "30,45 20 * * *"
+    - cron: "0,15,30 21 * * *"
   repository_dispatch:
     types: [dapa-morning-brief]
   workflow_dispatch:
@@ -24,6 +25,7 @@ jobs:
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       PYTHONPATH: src
       TZ: Asia/Seoul
+      DAPA_PRESS_RELEASE_CACHE: .dapa-state/latest-press-releases.json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -53,6 +55,14 @@ jobs:
         with:
           path: .dapa-sent
           key: dapa-morning-brief-${{ steps.kst-date.outputs.today }}
+      - id: press-release-cache
+        if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: .dapa-state
+          key: dapa-press-releases-${{ steps.kst-date.outputs.today }}
+          restore-keys: |
+            dapa-press-releases-
       - name: Install Copilot CLI
         if: github.event_name != 'schedule' || (steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true')
         continue-on-error: true
@@ -62,6 +72,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uv run python -m dapa_morning_brief.cli --days 1 --fallback-days 2
+      - name: Save latest official press releases
+        if: github.event_name == 'schedule' && steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true' && success()
+        uses: actions/cache/save@v4
+        with:
+          path: .dapa-state
+          key: dapa-press-releases-${{ steps.kst-date.outputs.today }}
       - name: Mark scheduled brief sent
         if: github.event_name == 'schedule' && steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true' && success()
         run: |

@@ -12,6 +12,8 @@ from dapa_morning_brief.telegram_format import daily_quote, format_telegram_mess
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from dapa_morning_brief.copilot_summary import ArticleBody
+
 __all__ = ["build_briefing", "daily_quote", "format_telegram_message"]
 
 SECTION_ORDER: Final[tuple[Section, ...]] = (
@@ -36,10 +38,12 @@ def build_briefing(
     articles: Iterable[Article],
     *,
     max_per_section: int,
+    article_bodies: Iterable[ArticleBody] = (),
 ) -> Briefing:
     """Select newest non-duplicate articles for each section."""
     buckets: dict[Section, list[Article]] = {section: [] for section in SECTION_ORDER}
     selected_articles: list[Article] = []
+    body_by_url = {body.article_url: body.body for body in article_bodies}
 
     for section in SECTION_ORDER:
         candidates = sorted(
@@ -48,7 +52,13 @@ def build_briefing(
         )
         for article in candidates:
             if any(
-                are_same_articles(article, selected) for selected in selected_articles
+                are_same_articles(
+                    article,
+                    selected,
+                    left_body=body_by_url.get(article.url, ""),
+                    right_body=body_by_url.get(selected.url, ""),
+                )
+                for selected in selected_articles
             ):
                 continue
             buckets[section].append(article)
@@ -59,6 +69,7 @@ def build_briefing(
             section_articles=buckets[section],
             candidates=candidates,
             selected_articles=selected_articles,
+            body_by_url=body_by_url,
         )
 
     return Briefing(
@@ -93,6 +104,7 @@ def _reserve_agency_article(
     section_articles: list[Article],
     candidates: list[Article],
     selected_articles: list[Article],
+    body_by_url: dict[str, str],
 ) -> None:
     if not section_articles or any(
         _is_agency_article(item) for item in section_articles
@@ -102,7 +114,13 @@ def _reserve_agency_article(
         if not _is_agency_article(candidate):
             continue
         if any(
-            are_same_articles(candidate, selected) for selected in selected_articles
+            are_same_articles(
+                candidate,
+                selected,
+                left_body=body_by_url.get(candidate.url, ""),
+                right_body=body_by_url.get(selected.url, ""),
+            )
+            for selected in selected_articles
         ):
             continue
         replaced = section_articles[-1]

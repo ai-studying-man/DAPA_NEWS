@@ -180,8 +180,17 @@ def format_telegram_message(
                         (
                             f"{index}. {html.escape(agency, quote=False)} ",
                             "보도자료 : ",
-                            f'<a href="{html.escape(release.url)}"><b>',
-                            f"{html.escape(release.title, quote=False)}</b></a>",
+                            html.escape(release.title, quote=False),
+                        ),
+                    ),
+                )
+                lines.append(
+                    "".join(
+                        (
+                            "🔗 ",
+                            f'<a href="{html.escape(release.url)}">',
+                            f"{html.escape(agency, quote=False)} ",
+                            "보도자료 링크 바로가기</a>",
                         ),
                     ),
                 )

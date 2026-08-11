@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from dapa_morning_brief.briefing import build_briefing
+from dapa_morning_brief.copilot_summary import ArticleBody
 from dapa_morning_brief.models import Article, Section
 from dapa_morning_brief.story_deduplication import are_same_story
 
@@ -98,6 +99,78 @@ def test_build_briefing_uses_rss_description_to_detect_duplicate_story() -> None
     assert [article.url for article in briefing.sections[Section.POLICY]] == [
         "https://example.com/second",
     ]
+
+
+def test_build_briefing_collapses_articles_with_half_matching_body_flow() -> None:
+    published = datetime(2026, 8, 12, 5, 30, tzinfo=UTC)
+    shared_flow = (
+        "충남 논산 방산혁신클러스터 지역협의회가 공식 출범했다. "
+        "협의회는 연간 사업계획과 세부 예산을 심의하고 AI 국방로봇 산업을 "
+        "육성한다. 방위사업청과 충남도 논산시는 기업 지원과 연구 기반 조성을 "
+        "함께 추진한다."
+    )
+    articles = [
+        Article(
+            title="충남·논산에 499억 투입…AI 국방로봇 산업 가동",
+            url="https://example.com/higher-views",
+            published_at=published,
+            source="뉴스A",
+            section=Section.POLICY,
+            view_count=900,
+        ),
+        Article(
+            title="지역협의회 첫 회의…방산 생태계 구축 본격화",
+            url="https://example.com/lower-views",
+            published_at=published,
+            source="뉴스B",
+            section=Section.POLICY,
+            view_count=300,
+        ),
+        Article(
+            title="방사청 출연기관 신임 소장 공개 모집",
+            url="https://example.com/replacement",
+            published_at=published,
+            source="뉴스C",
+            section=Section.POLICY,
+            view_count=100,
+        ),
+    ]
+    bodies = (
+        ArticleBody(
+            article_url=articles[0].url,
+            title=articles[0].title,
+            source=articles[0].source,
+            body=f"{shared_flow} 참여 기관은 다음 달 후속 회의를 연다.",
+        ),
+        ArticleBody(
+            article_url=articles[1].url,
+            title=articles[1].title,
+            source=articles[1].source,
+            body=f"현장 관계자들이 추진 방향을 설명했다. {shared_flow}",
+        ),
+    )
+
+    briefing = build_briefing(
+        articles,
+        max_per_section=5,
+        article_bodies=bodies,
+    )
+
+    assert [article.url for article in briefing.sections[Section.POLICY]] == [
+        "https://example.com/higher-views",
+        "https://example.com/replacement",
+    ]
+
+
+def test_same_story_when_specific_program_and_context_match() -> None:
+    assert are_same_story(
+        "충남·논산에 499억 투입…AI 국방로봇 방산혁신클러스터 가동",
+        "논산 방산혁신클러스터, 이제는 실행이다",
+    )
+    assert are_same_story(
+        "충남·논산에 499억 투입…AI 국방로봇 방산혁신클러스터 가동",
+        "논산시 '충남·논산 방산혁신클러스터지역협의회' 출범",
+    )
 
 
 def test_build_briefing_uses_feed_prominence_when_views_are_unavailable() -> None:

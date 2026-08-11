@@ -196,15 +196,16 @@ class BriefingTest(TestCase):
         dapa_base = "https://www.dapa.go.kr/dapa/doc/selectDoc.do?bbsSeq=326"
         dapa_url = f"{dapa_base}&amp;docSeq={58959}&amp;menuSeq=3069"
         heading = "국방부(26.8.5.) / 방사청(26.8.5.) 보도자료"
-        mnd_prefix = '1. 국방부 보도자료 : <a href="'
-        mnd_suffix = '"><b>국방부 업무보고</b></a>'
-        expected_mnd = f"{mnd_prefix}{mnd_url}{mnd_suffix}"
-        dapa_prefix = '2. 방사청 보도자료 : <a href="'
-        dapa_suffix = '"><b>\u2018대체불가 K-방산\u2019으로의 도약</b></a>'
-        expected_dapa = f"{dapa_prefix}{dapa_url}{dapa_suffix}"
         assert heading in message
-        assert expected_mnd in message
-        assert expected_dapa in message
+        assert "1. 국방부 보도자료 : 국방부 업무보고" in message
+        assert (
+            f'🔗 <a href="{mnd_url}">국방부 보도자료 링크 바로가기</a>' in message
+        )
+        assert "2. 방사청 보도자료 : \u2018대체불가 K-방산\u2019으로의 도약" in message
+        assert (
+            f'🔗 <a href="{dapa_url}">방사청 보도자료 링크 바로가기</a>' in message
+        )
+        assert "<b>" not in message
         assert '"가장 최근의 보도자료 1건을 수집합니다"' in message
 
     def test_format_telegram_message_escapes_html_in_article_fields(self) -> None:

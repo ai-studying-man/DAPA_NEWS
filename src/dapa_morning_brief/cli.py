@@ -7,6 +7,7 @@ import os
 import sys
 from datetime import date, datetime
 from io import TextIOWrapper
+from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 from zoneinfo import ZoneInfo
@@ -35,6 +36,7 @@ COPILOT_SUMMARY_TEMPLATE: Final = (
 )
 PRESS_RELEASE_CACHE_ENV: Final = "DAPA_PRESS_RELEASE_CACHE"
 PREPARED_BRIEF_TEMPLATE: Final = "Prepared brief saved: {path}\n"
+BODY_DEDUP_CANDIDATE_MULTIPLIER: Final = 3
 
 
 class BriefNamespace(argparse.Namespace):
@@ -104,7 +106,23 @@ def _prepare_brief(
             if article.section in missing_sections
         )
 
-    briefing = build_briefing(articles, max_per_section=max_per_section)
+    article_bodies = ()
+    if generate_practice_points:
+        candidate_briefing = build_briefing(
+            articles,
+            max_per_section=max_per_section * BODY_DEDUP_CANDIDATE_MULTIPLIER,
+        )
+        article_bodies = fetch_article_bodies(candidate_briefing)
+        candidate_articles = tuple(
+            chain.from_iterable(candidate_briefing.sections.values()),
+        )
+        briefing = build_briefing(
+            candidate_articles,
+            max_per_section=max_per_section,
+            article_bodies=article_bodies,
+        )
+    else:
+        briefing = build_briefing(articles, max_per_section=max_per_section)
     raw_cache_path = os.getenv(PRESS_RELEASE_CACHE_ENV, "")
     latest_press_releases = official_press_releases.collect_latest_press_releases(
         as_of=today,
@@ -115,13 +133,20 @@ def _prepare_brief(
         len(briefing.sections[section]) for section in PRACTICE_POINT_SECTIONS
     )
     if generate_practice_points:
-        article_bodies = fetch_article_bodies(briefing)
-        practice_points = summarize_article_bodies(article_bodies)
+        selected_urls = {
+            article.url
+            for section in PRACTICE_POINT_SECTIONS
+            for article in briefing.sections[section]
+        }
+        selected_bodies = tuple(
+            body for body in article_bodies if body.article_url in selected_urls
+        )
+        practice_points = summarize_article_bodies(selected_bodies)
         _ = sys.stderr.write(
             COPILOT_SUMMARY_TEMPLATE.format(
                 generated=len(practice_points),
                 fallback=selected_count - len(practice_points),
-                bodies=len(article_bodies),
+                bodies=len(selected_bodies),
             ),
         )
     message = format_telegram_message(

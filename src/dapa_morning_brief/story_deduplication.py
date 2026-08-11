@@ -91,8 +91,21 @@ MIN_SHARED_CONTEXT_TOKENS: Final = 2
 MIN_CONTAINMENT_RATIO: Final = 0.5
 MIN_DESCRIPTION_SHARED_TOKENS: Final = 4
 MIN_DESCRIPTION_CONTAINMENT_RATIO: Final = 0.7
+BODY_SHINGLE_SIZE: Final = 3
+MIN_BODY_SHARED_SHINGLES: Final = 8
+MIN_BODY_CONTAINMENT_RATIO: Final = 0.5
+MIN_BODY_SHARED_TOKENS: Final = 30
 MIN_EVENT_SUBJECT_TOKEN_LENGTH: Final = 6
-MIN_TOKEN_LENGTH_FOR_PARTICLE_STRIP: Final = 4
+MIN_TOKEN_LENGTH_FOR_PARTICLE_STRIP: Final = 3
+ADMINISTRATIVE_SUFFIXES: Final[tuple[str, ...]] = (
+    "특별자치도",
+    "특별자치시",
+    "광역시",
+    "특별시",
+    "시",
+    "도",
+    "군",
+)
 KOREAN_PARTICLES: Final[tuple[str, ...]] = (
     "으로",
     "에서",
@@ -140,8 +153,13 @@ def are_same_story(left_title: str, right_title: str) -> bool:
     )
     if (
         shares_event_subject
-        and left_tokens & EVENT_ACTION_TOKENS
-        and right_tokens & EVENT_ACTION_TOKENS
+        and (
+            (
+                left_tokens & EVENT_ACTION_TOKENS
+                and right_tokens & EVENT_ACTION_TOKENS
+            )
+            or len(shared_tokens) >= MIN_SHARED_CONTEXT_TOKENS
+        )
     ) or (
         len(shared_tokens) >= MIN_SHARED_CONTEXT_TOKENS
         and any(
@@ -179,9 +197,17 @@ def _have_conflicting_event_facts(
     return bool(different_markets or conflicting_outcomes)
 
 
-def are_same_articles(left: Article, right: Article) -> bool:
-    """Compare article titles and available RSS descriptions."""
+def are_same_articles(
+    left: Article,
+    right: Article,
+    *,
+    left_body: str = "",
+    right_body: str = "",
+) -> bool:
+    """Compare article titles, RSS descriptions, and extracted bodies."""
     if are_same_story(left.title, right.title):
+        return True
+    if left_body and right_body and _have_similar_body_flow(left_body, right_body):
         return True
     if not left.description or not right.description:
         return False
@@ -193,6 +219,32 @@ def are_same_articles(left: Article, right: Article) -> bool:
         return False
     shorter_token_count = min(len(left_tokens), len(right_tokens))
     return len(shared_tokens) / shorter_token_count >= MIN_DESCRIPTION_CONTAINMENT_RATIO
+
+
+def _have_similar_body_flow(left_body: str, right_body: str) -> bool:
+    left_tokens = _title_tokens(left_body)
+    right_tokens = _title_tokens(right_body)
+    shared_tokens = left_tokens & right_tokens
+    if len(shared_tokens) >= MIN_BODY_SHARED_TOKENS:
+        shorter_token_count = min(len(left_tokens), len(right_tokens))
+        if len(shared_tokens) / shorter_token_count >= MIN_BODY_CONTAINMENT_RATIO:
+            return True
+
+    left_shingles = _body_shingles(left_body)
+    right_shingles = _body_shingles(right_body)
+    shared_shingles = left_shingles & right_shingles
+    if len(shared_shingles) < MIN_BODY_SHARED_SHINGLES:
+        return False
+    shorter_shingle_count = min(len(left_shingles), len(right_shingles))
+    return len(shared_shingles) / shorter_shingle_count >= MIN_BODY_CONTAINMENT_RATIO
+
+
+def _body_shingles(body: str) -> frozenset[tuple[str, ...]]:
+    tokens = re.findall(r"[0-9a-z]+|[가-힣]+", html.unescape(body).casefold())
+    return frozenset(
+        tuple(tokens[index : index + BODY_SHINGLE_SIZE])
+        for index in range(len(tokens) - BODY_SHINGLE_SIZE + 1)
+    )
 
 
 def _normalize_title(title: str) -> str:
@@ -243,6 +295,10 @@ def _normalize_aliases(title: str) -> str:
     normalized = html.unescape(title).casefold()
     normalized = re.sub(r"snt\s*다이내믹스", "snt", normalized)
     normalized = re.sub(r"k\s*-\s*방산", "방산", normalized)
+    normalized = normalized.replace(
+        "방산혁신클러스터지역협의회",
+        "방산혁신클러스터 지역협의회",
+    )
     normalized = normalized.replace("방산혁신단지", "방산혁신클러스터")
     return normalized.replace("대통령표창", "대통령 표창")
 
@@ -254,6 +310,9 @@ def _compact_title_token(token: str) -> str:
         return token.removesuffix("하는")
     if "연구원" in token:
         return "연구원"
+    for suffix in ADMINISTRATIVE_SUFFIXES:
+        if token.endswith(suffix) and len(token) > len(suffix) + 1:
+            return token.removesuffix(suffix)
     for particle in KOREAN_PARTICLES:
         if (
             token.endswith(particle)

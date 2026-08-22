@@ -4,7 +4,7 @@ from unittest import TestCase
 
 from dapa_morning_brief.collector import classify_title, is_relevant_title
 from dapa_morning_brief.models import Section
-from dapa_morning_brief.source_config import SECTION_QUERIES
+from dapa_morning_brief.source_config import RSS_SOURCES, SECTION_QUERIES
 
 
 class CollectorTest(TestCase):
@@ -74,6 +74,15 @@ class CollectorTest(TestCase):
         # When / Then
         assert SECTION_QUERIES[Section.GOVERNMENT][0] == '"국방부"'
         assert '"국방부"' in queries
+
+    def test_rss_sources_exclude_policy_briefing_feeds(self) -> None:
+        # Given
+        source_urls = tuple(source.url for source in RSS_SOURCES)
+
+        # When
+        # Then
+        assert source_urls
+        assert all("korea.kr/rss" not in url for url in source_urls)
 
     def test_section_queries_cover_dapa_press_office_topics(self) -> None:
         queries = " ".join(

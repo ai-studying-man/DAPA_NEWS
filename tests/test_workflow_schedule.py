@@ -23,17 +23,14 @@ def test_workflow_prepares_from_0600_and_sends_prepared_json_at_0630() -> None:
     )
 
 
-def test_workflow_bootstraps_and_saves_press_release_cache_before_send() -> None:
+def test_workflow_does_not_bootstrap_press_release_cache() -> None:
     # Given
     workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(
         encoding="utf-8",
     )
 
     # When
-    seed = "data/initial-press-releases.json"
-    save_cache = "Save latest official press releases"
-    send_command = "--prepared-input .dapa-prepared/morning-brief.json"
-
     # Then
-    assert seed in workflow
-    assert workflow.index(save_cache) < workflow.index(send_command)
+    assert "DAPA_PRESS_RELEASE_CACHE" not in workflow
+    assert "official press release cache" not in workflow.casefold()
+    assert "initial-press-releases.json" not in workflow

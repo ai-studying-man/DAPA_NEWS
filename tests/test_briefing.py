@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime
 from unittest import TestCase
 
 from dapa_morning_brief.briefing import build_briefing, format_telegram_message
-from dapa_morning_brief.models import Article, OfficialPressRelease, Section
+from dapa_morning_brief.models import Article, Section, WeatherForecast
 
 
 class BriefingTest(TestCase):
@@ -148,65 +148,37 @@ class BriefingTest(TestCase):
             in message
         )
 
-    def test_official_press_release_section_is_omitted_when_unavailable(self) -> None:
+    def test_message_includes_weather_and_omits_press_releases(self) -> None:
         # Given
         briefing = build_briefing([], max_per_section=3)
+        weather = (
+            WeatherForecast(
+                city="과천시",
+                condition="맑음",
+                minimum_celsius=21.4,
+                maximum_celsius=31.8,
+            ),
+            WeatherForecast(
+                city="대전시",
+                condition="흐림",
+                minimum_celsius=22.1,
+                maximum_celsius=30.7,
+            ),
+        )
 
         # When
         message = format_telegram_message(
             briefing,
             today=date(2026, 8, 6),
-            official_press_releases=(),
+            weather_forecasts=weather,
         )
 
         # Then
+        assert "💬 오늘의 날씨" in message
+        assert "1. 과천시 : 맑음 / 21.4℃ ~ 31.8℃" in message
+        assert "2. 대전시 : 흐림 / 22.1℃ ~ 30.7℃" in message
         assert "국방부 / 방사청 보도자료" not in message
-        assert "수집된 공식 보도자료 없음" not in message
-
-    def test_official_press_release_section_renders_latest_board_links(self) -> None:
-        # Given
-        briefing = build_briefing([], max_per_section=3)
-        releases = (
-            OfficialPressRelease(
-                agency="국방부",
-                title="국방부 업무보고",
-                url=("https://www.mnd.go.kr/bbs/mnd/13000005/DPIM_118612/artclView.do"),
-                published_on=date(2026, 8, 5),
-            ),
-            OfficialPressRelease(
-                agency="방위사업청",
-                title="\u2018대체불가 K-방산\u2019으로의 도약",
-                url=(
-                    "https://www.dapa.go.kr/dapa/doc/selectDoc.do?"
-                    "bbsSeq=326&docSeq=58959&menuSeq=3069"
-                ),
-                published_on=date(2026, 8, 5),
-            ),
-        )
-
-        # When
-        message = format_telegram_message(
-            briefing,
-            today=date(2026, 8, 7),
-            official_press_releases=releases,
-        )
-
-        # Then
-        mnd_url = "https://www.mnd.go.kr/bbs/mnd/13000005/DPIM_118612/artclView.do"
-        dapa_base = "https://www.dapa.go.kr/dapa/doc/selectDoc.do?bbsSeq=326"
-        dapa_url = f"{dapa_base}&amp;docSeq={58959}&amp;menuSeq=3069"
-        heading = "국방부(26.8.5.) / 방사청(26.8.5.) 보도자료"
-        assert heading in message
-        assert "1. 국방부 보도자료 : 국방부 업무보고" in message
-        assert (
-            f'🔗 <a href="{mnd_url}">국방부 보도자료 링크 바로가기</a>' in message
-        )
-        assert "2. 방사청 보도자료 : \u2018대체불가 K-방산\u2019으로의 도약" in message
-        assert (
-            f'🔗 <a href="{dapa_url}">방사청 보도자료 링크 바로가기</a>' in message
-        )
-        assert "<b>" not in message
-        assert '"가장 최근의 보도자료 1건을 수집합니다"' in message
+        assert "가장 최근의 보도자료" not in message
 
     def test_format_telegram_message_escapes_html_in_article_fields(self) -> None:
         # Given

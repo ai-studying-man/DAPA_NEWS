@@ -101,21 +101,6 @@ class RssSource:
 
 RSS_SOURCES: Final[tuple[RssSource, ...]] = (
     RssSource(
-        name="정책브리핑 방위사업청",
-        url="https://www.korea.kr/rss/dept_dapa.xml",
-        default_section=Section.POLICY,
-    ),
-    RssSource(
-        name="정책브리핑 국방부",
-        url="https://www.korea.kr/rss/dept_mnd.xml",
-        default_section=Section.POLICY,
-    ),
-    RssSource(
-        name="정책브리핑 보도자료",
-        url="https://www.korea.kr/rss/pressrelease.xml",
-        default_section=None,
-    ),
-    RssSource(
         name="국방일보 방위사업",
         url="http://kookbang.dema.mil.kr/dema_xml/dema0010020000.xml",
         default_section=None,

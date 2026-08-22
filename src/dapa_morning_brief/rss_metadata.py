@@ -45,7 +45,13 @@ def _parse_date(raw: str) -> datetime | None:
 
 
 def _clean_title(title: str) -> str:
-    return re.sub(r"\s+", " ", html.unescape(title)).strip()
+    cleaned = re.sub(r"\s+", " ", html.unescape(title)).strip()
+    return re.sub(
+        r"\s*(?:[-|·]\s*)?\[?\s*(?:v\.daum\.net|(?:www\.)?newfilenews\.com)\s*\]?\s*$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    ).rstrip()
 
 
 def _clean_description(description: str) -> str:

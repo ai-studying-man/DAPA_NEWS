@@ -58,7 +58,7 @@ def test_cli_prepares_json_without_sending_telegram(tmp_path: Path) -> None:
     with (
         patch("dapa_morning_brief.cli.collect_articles", return_value=[article]),
         patch(
-            "dapa_morning_brief.official_press_releases.collect_latest_press_releases",
+            "dapa_morning_brief.cli.collect_weather_forecasts",
             return_value=(),
         ),
         patch("dapa_morning_brief.cli.fetch_article_bodies", return_value=(body,)),

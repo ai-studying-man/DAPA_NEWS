@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
     from datetime import date
 
-    from dapa_morning_brief.models import Briefing, OfficialPressRelease, PracticePoint
+    from dapa_morning_brief.models import Briefing, PracticePoint, WeatherForecast
 
 SECTION_ORDER: Final[tuple[Section, ...]] = (
     Section.GOVERNMENT,
@@ -35,10 +35,6 @@ SECTION_ICONS: Final[dict[Section, str]] = {
     Section.POLICY: "🏛️",
     Section.WEAPON_SYSTEM: "⚙️",
     Section.EXPORT_BUSINESS: "🌏",
-}
-
-OFFICIAL_AGENCY_LABELS: Final[dict[str, str]] = {
-    "방위사업청": "방사청",
 }
 
 PRACTICE_POINTS: Final[dict[Section, str]] = {
@@ -112,17 +108,26 @@ def format_telegram_message(
     *,
     today: date,
     practice_points: Iterable[PracticePoint] = (),
-    official_press_releases: Iterable[OfficialPressRelease] = (),
+    weather_forecasts: Iterable[WeatherForecast] = (),
 ) -> str:
     """Render a Telegram-ready plain text briefing."""
     generated_points = {point.article_url: point.text for point in practice_points}
-    releases = tuple(official_press_releases)
+    forecasts = tuple(weather_forecasts)
     lines = [
         f"방사청 출근길 오늘의 뉴스는?💡 - {today:%Y.%m.%d}",
         "",
         "💬 오늘의 한마디",
         f'"{daily_quote(today)}"',
+        "",
+        "💬 오늘의 날씨",
     ]
+    if forecasts:
+        lines.extend(
+            f"{index}. {_format_weather_forecast(forecast)}"
+            for index, forecast in enumerate(forecasts, start=1)
+        )
+    else:
+        lines.append("날씨 정보 수집 실패")
     for section in SECTION_ORDER:
         lines.extend(["", "━━━━━━━━━━━━━━━", ""])
         articles = briefing.sections[section]
@@ -152,55 +157,6 @@ def format_telegram_message(
                     ],
                 )
 
-        if section is Section.GOVERNMENT and releases:
-            release_heading = " / ".join(
-                (
-                    f"{OFFICIAL_AGENCY_LABELS.get(release.agency, release.agency)}"
-                    f"({release.published_on.year % 100}."
-                    f"{release.published_on.month}.{release.published_on.day}.)"
-                )
-                for release in releases
-            )
-            lines.extend(
-                [
-                    "",
-                    "━━━━━━━━━━━━━━━",
-                    "",
-                    f"🏛️ {release_heading} 보도자료",
-                    "",
-                ],
-            )
-            for index, release in enumerate(releases, start=1):
-                agency = OFFICIAL_AGENCY_LABELS.get(
-                    release.agency,
-                    release.agency,
-                )
-                lines.append(
-                    "".join(
-                        (
-                            f"{index}. {html.escape(agency, quote=False)} ",
-                            "보도자료 : ",
-                            html.escape(release.title, quote=False),
-                        ),
-                    ),
-                )
-                lines.append(
-                    "".join(
-                        (
-                            "🔗 ",
-                            f'<a href="{html.escape(release.url)}">',
-                            f"{html.escape(agency, quote=False)} ",
-                            "보도자료 링크 바로가기</a>",
-                        ),
-                    ),
-                )
-            lines.extend(
-                [
-                    "",
-                    '"가장 최근의 보도자료 1건을 수집합니다"',
-                ],
-            )
-
     lines.extend(
         [
             "━━━━━━━━━━━━━━━",
@@ -220,6 +176,16 @@ def daily_quote(today: date) -> str:
 
 def _section_heading(section: Section) -> str:
     return f"{SECTION_ICONS[section]} {section.display_title}"
+
+
+def _format_weather_forecast(forecast: WeatherForecast) -> str:
+    if forecast.minimum_celsius is None or forecast.maximum_celsius is None:
+        return f"{html.escape(forecast.city, quote=False)} : {forecast.condition}"
+    return (
+        f"{html.escape(forecast.city, quote=False)} : "
+        f"{html.escape(forecast.condition, quote=False)} / "
+        f"{forecast.minimum_celsius:g}℃ ~ {forecast.maximum_celsius:g}℃"
+    )
 
 
 def _practice_point(article: Article) -> str:

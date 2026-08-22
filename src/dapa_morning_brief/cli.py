@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final
 from zoneinfo import ZoneInfo
 
-from dapa_morning_brief import official_press_releases
 from dapa_morning_brief.article_content import fetch_article_bodies
 from dapa_morning_brief.briefing import build_briefing, format_telegram_message
 from dapa_morning_brief.collector import collect_articles
@@ -24,6 +23,7 @@ from dapa_morning_brief.telegram import (
     parse_chat_ids,
     send_telegram_messages,
 )
+from dapa_morning_brief.weather import collect_weather_forecasts
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -34,7 +34,6 @@ KST: Final[ZoneInfo] = ZoneInfo("Asia/Seoul")
 COPILOT_SUMMARY_TEMPLATE: Final = (
     "Copilot summary: generated={generated} fallback={fallback} bodies={bodies}\n"
 )
-PRESS_RELEASE_CACHE_ENV: Final = "DAPA_PRESS_RELEASE_CACHE"
 PREPARED_BRIEF_TEMPLATE: Final = "Prepared brief saved: {path}\n"
 BODY_DEDUP_CANDIDATE_MULTIPLIER: Final = 3
 
@@ -123,11 +122,7 @@ def _prepare_brief(
         )
     else:
         briefing = build_briefing(articles, max_per_section=max_per_section)
-    raw_cache_path = os.getenv(PRESS_RELEASE_CACHE_ENV, "")
-    latest_press_releases = official_press_releases.collect_latest_press_releases(
-        as_of=today,
-        cache_path=Path(raw_cache_path) if raw_cache_path else None,
-    )
+    weather_forecasts = collect_weather_forecasts(as_of=today)
     practice_points = ()
     selected_count = sum(
         len(briefing.sections[section]) for section in PRACTICE_POINT_SECTIONS
@@ -153,7 +148,7 @@ def _prepare_brief(
         briefing,
         today=today,
         practice_points=practice_points,
-        official_press_releases=latest_press_releases,
+        weather_forecasts=weather_forecasts,
     )
     return PreparedBrief(
         briefing_date=today,

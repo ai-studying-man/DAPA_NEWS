@@ -73,6 +73,16 @@ class OfficialPressRelease:
 
 
 @dataclass(frozen=True, slots=True)
+class WeatherForecast:
+    """A city's daily weather forecast for the briefing date."""
+
+    city: str
+    condition: str
+    minimum_celsius: float | None
+    maximum_celsius: float | None
+
+
+@dataclass(frozen=True, slots=True)
 class Briefing:
     """Selected newsletter articles grouped by section."""
 

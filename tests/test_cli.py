@@ -2,46 +2,49 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from io import StringIO
-from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
 
 import pytest
 
-from dapa_morning_brief.cli import DEFAULT_DAYS, DEFAULT_FALLBACK_DAYS, main
+from dapa_morning_brief.cli import DEFAULT_DAYS, DEFAULT_FALLBACK_DAYS, KST, main
 from dapa_morning_brief.copilot_summary import ArticleBody
 from dapa_morning_brief.models import (
     Article,
-    OfficialPressRelease,
     PracticePoint,
     Section,
+    WeatherForecast,
 )
 
 
 class CliTest(TestCase):
-    def test_cli_uses_persistent_press_release_cache_when_configured(self) -> None:
+    def test_cli_collects_weather_for_the_briefing_date(self) -> None:
         # Given
         output = StringIO()
-        cache_path = Path(".dapa-state/latest-press-releases.json")
+        weather = (
+            WeatherForecast(
+                city="과천시",
+                condition="맑음",
+                minimum_celsius=21.0,
+                maximum_celsius=31.0,
+            ),
+        )
 
         # When
         with (
             patch("dapa_morning_brief.cli.collect_articles", return_value=[]),
             patch(
-                "dapa_morning_brief.official_press_releases.collect_latest_press_releases",
-                return_value=(),
+                "dapa_morning_brief.cli.collect_weather_forecasts",
+                return_value=weather,
             ) as collect,
-            patch.dict(
-                "os.environ",
-                {"DAPA_PRESS_RELEASE_CACHE": str(cache_path)},
-            ),
             patch("sys.stdout", output),
         ):
             exit_code = main(["--dry-run"])
 
         # Then
         assert exit_code == 0
-        assert collect.call_args.kwargs["cache_path"] == cache_path
+        assert collect.call_args.kwargs["as_of"] == datetime.now(KST).date()
+        assert "1. 과천시 : 맑음 / 21℃ ~ 31℃" in output.getvalue()
 
     def test_cli_defaults_to_daily_freshness_window(self) -> None:
         # Given
@@ -90,7 +93,7 @@ class CliTest(TestCase):
                 ],
             ) as collect,
             patch(
-                "dapa_morning_brief.official_press_releases.collect_latest_press_releases",
+                "dapa_morning_brief.cli.collect_weather_forecasts",
                 return_value=(),
             ),
             patch("sys.stdout", output),
@@ -108,7 +111,7 @@ class CliTest(TestCase):
         with (
             patch("dapa_morning_brief.cli.collect_articles", return_value=[]),
             patch(
-                "dapa_morning_brief.official_press_releases.collect_latest_press_releases",
+                "dapa_morning_brief.cli.collect_weather_forecasts",
                 return_value=(),
             ),
             patch("sys.stdout", output),
@@ -148,7 +151,7 @@ class CliTest(TestCase):
         with (
             patch("dapa_morning_brief.cli.collect_articles", return_value=[article]),
             patch(
-                "dapa_morning_brief.official_press_releases.collect_latest_press_releases",
+                "dapa_morning_brief.cli.collect_weather_forecasts",
                 return_value=(),
             ),
             patch(
@@ -174,22 +177,16 @@ class CliTest(TestCase):
             == "Copilot summary: generated=1 fallback=0 bodies=1\n"
         )
 
-    def test_cli_includes_latest_official_press_releases_in_dry_run(self) -> None:
+    def test_cli_omits_press_releases_from_dry_run(self) -> None:
         # Given
-        release = OfficialPressRelease(
-            agency="국방부",
-            title="국방부 업무보고",
-            url=("https://www.mnd.go.kr/bbs/mnd/13000005/DPIM_118612/artclView.do"),
-            published_on=datetime(2026, 8, 5, tzinfo=UTC).date(),
-        )
         output = StringIO()
 
         # When
         with (
             patch("dapa_morning_brief.cli.collect_articles", return_value=[]),
             patch(
-                "dapa_morning_brief.official_press_releases.collect_latest_press_releases",
-                return_value=(release,),
+                "dapa_morning_brief.cli.collect_weather_forecasts",
+                return_value=(),
             ),
             patch("sys.stdout", output),
         ):
@@ -197,5 +194,4 @@ class CliTest(TestCase):
 
         # Then
         assert exit_code == 0
-        assert "국방부(26.8.5.) 보도자료" in output.getvalue()
-        assert "국방부 업무보고" in output.getvalue()
+        assert "보도자료" not in output.getvalue()

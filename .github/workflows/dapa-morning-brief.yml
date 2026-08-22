@@ -24,7 +24,6 @@ jobs:
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       PYTHONPATH: src
       TZ: Asia/Seoul
-      DAPA_PRESS_RELEASE_CACHE: .dapa-state/latest-press-releases.json
     steps:
       - uses: actions/checkout@v4
       - id: kst-date
@@ -43,21 +42,6 @@ jobs:
         if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
       - if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
         run: uv sync
-      - id: press-release-cache
-        if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v4
-        with:
-          path: .dapa-state
-          key: dapa-press-releases-${{ steps.kst-date.outputs.today }}
-          restore-keys: |
-            dapa-press-releases-
-      - name: Bootstrap official press release cache
-        if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p .dapa-state
-          if [ ! -s "$DAPA_PRESS_RELEASE_CACHE" ]; then
-            cp data/initial-press-releases.json "$DAPA_PRESS_RELEASE_CACHE"
-          fi
       - name: Install Copilot CLI
         if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
         continue-on-error: true
@@ -71,13 +55,6 @@ jobs:
           uv run python -m dapa_morning_brief.cli
           --days 1 --fallback-days 2
           --prepare-output .dapa-prepared/morning-brief.json
-      - name: Save latest official press releases
-        if: github.event_name == 'schedule' && steps.sent-cache.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success' && steps.press-release-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: .dapa-state
-          key: dapa-press-releases-${{ steps.kst-date.outputs.today }}
       - id: send-window
         if: github.event_name == 'schedule' && steps.sent-cache.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
         run: |

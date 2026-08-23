@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from datetime import date
 
 OPEN_METEO_FORECAST_URL: Final = "https://api.open-meteo.com/v1/forecast"
+OPEN_METEO_MODEL: Final = "kma_seamless"
 KST_TIMEZONE: Final = "Asia/Seoul"
 
 
@@ -36,9 +37,9 @@ class _DailyForecastPayload(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
 
     time: tuple[str, ...]
-    weather_code: tuple[int, ...]
-    temperature_2m_min: tuple[float, ...]
-    temperature_2m_max: tuple[float, ...]
+    weather_code: tuple[int | None, ...]
+    temperature_2m_min: tuple[float | None, ...]
+    temperature_2m_max: tuple[float | None, ...]
 
 
 class _ForecastPayload(BaseModel):
@@ -66,38 +67,51 @@ def _collect_with_client(
 ) -> tuple[WeatherForecast, ...]:
     forecasts: list[WeatherForecast] = []
     for location in WEATHER_LOCATIONS:
-        try:
-            response = client.get(
-                OPEN_METEO_FORECAST_URL,
-                params={
+        forecast: WeatherForecast | None = None
+        for model in (OPEN_METEO_MODEL, None):
+            try:
+                params = {
                     "latitude": location.latitude,
                     "longitude": location.longitude,
                     "daily": "weather_code,temperature_2m_min,temperature_2m_max",
                     "timezone": KST_TIMEZONE,
                     "start_date": as_of.isoformat(),
                     "end_date": as_of.isoformat(),
-                },
-            )
-            _ = response.raise_for_status()
-            payload = _ForecastPayload.model_validate_json(response.content)
-            day_index = payload.daily.time.index(as_of.isoformat())
-            forecasts.append(
-                WeatherForecast(
+                }
+                if model is not None:
+                    params["models"] = model
+                response = client.get(OPEN_METEO_FORECAST_URL, params=params)
+                _ = response.raise_for_status()
+                payload = _ForecastPayload.model_validate_json(response.content)
+                day_index = payload.daily.time.index(as_of.isoformat())
+                weather_code = payload.daily.weather_code[day_index]
+                minimum_celsius = payload.daily.temperature_2m_min[day_index]
+                maximum_celsius = payload.daily.temperature_2m_max[day_index]
+                if (
+                    weather_code is None
+                    or minimum_celsius is None
+                    or maximum_celsius is None
+                ):
+                    continue
+                forecast = WeatherForecast(
                     city=location.city,
-                    condition=_weather_condition(payload.daily.weather_code[day_index]),
-                    minimum_celsius=payload.daily.temperature_2m_min[day_index],
-                    maximum_celsius=payload.daily.temperature_2m_max[day_index],
-                ),
-            )
-        except (httpx.HTTPError, ValidationError, ValueError):
-            forecasts.append(
-                WeatherForecast(
-                    city=location.city,
-                    condition="수집 실패",
-                    minimum_celsius=None,
-                    maximum_celsius=None,
-                ),
-            )
+                    condition=_weather_condition(weather_code),
+                    minimum_celsius=minimum_celsius,
+                    maximum_celsius=maximum_celsius,
+                )
+                break
+            except (httpx.HTTPError, ValidationError, ValueError):
+                continue
+        forecasts.append(
+            forecast
+            if forecast is not None
+            else WeatherForecast(
+                city=location.city,
+                condition="수집 실패",
+                minimum_celsius=None,
+                maximum_celsius=None,
+            ),
+        )
     return tuple(forecasts)
 
 

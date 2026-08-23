@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Final
 
 import httpx
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from dapa_morning_brief.models import WeatherForecast
 
@@ -15,6 +16,11 @@ if TYPE_CHECKING:
 
 OPEN_METEO_FORECAST_URL: Final = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_MODEL: Final = "kma_seamless"
+KMA_PROXY_BASE_URL: Final = (
+    os.environ.get("KSKILL_PROXY_BASE_URL")
+    or "https://k-skill-proxy.nomadamas.org"
+).rstrip("/")
+KMA_FORECAST_URL: Final = f"{KMA_PROXY_BASE_URL}/v1/korea-weather/forecast"
 KST_TIMEZONE: Final = "Asia/Seoul"
 
 
@@ -48,6 +54,42 @@ class _ForecastPayload(BaseModel):
     daily: _DailyForecastPayload
 
 
+class _KmaForecastItem(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        frozen=True,
+        populate_by_name=True,
+    )
+
+    category: str
+    forecast_date: str = Field(alias="fcstDate")
+    forecast_time: str = Field(alias="fcstTime")
+    forecast_value: str = Field(alias="fcstValue")
+
+
+class _KmaForecastItems(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    item: tuple[_KmaForecastItem, ...]
+
+
+class _KmaForecastBody(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    items: _KmaForecastItems
+
+
+class _KmaForecastResponse(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    body: _KmaForecastBody
+
+
+class _KmaForecastPayload(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
+
+    response: _KmaForecastResponse
+
+
 def collect_weather_forecasts(
     *,
     as_of: date,
@@ -69,6 +111,17 @@ def _collect_with_client(
     for location in WEATHER_LOCATIONS:
         forecast: WeatherForecast | None = None
         for model in (OPEN_METEO_MODEL, None):
+            if model is None:
+                try:
+                    forecast = _collect_kma_forecast(
+                        as_of=as_of,
+                        client=client,
+                        location=location,
+                    )
+                except (httpx.HTTPError, ValidationError, ValueError):
+                    forecast = None
+                if forecast is not None:
+                    break
             try:
                 params = {
                     "latitude": location.latitude,
@@ -113,6 +166,82 @@ def _collect_with_client(
             ),
         )
     return tuple(forecasts)
+
+
+def _collect_kma_forecast(
+    *,
+    as_of: date,
+    client: httpx.Client,
+    location: WeatherLocation,
+) -> WeatherForecast | None:
+    response = client.get(
+        KMA_FORECAST_URL,
+        params={
+            "lat": location.latitude,
+            "lon": location.longitude,
+        },
+    )
+    _ = response.raise_for_status()
+    payload = _KmaForecastPayload.model_validate_json(response.content)
+    target_date = as_of.strftime("%Y%m%d")
+    items = tuple(
+        item
+        for item in payload.response.body.items.item
+        if item.forecast_date == target_date
+    )
+    hourly_temperatures = [
+        float(item.forecast_value)
+        for item in items
+        if item.category == "TMP"
+    ]
+    if not hourly_temperatures:
+        return None
+    minimum_temperatures = [
+        float(item.forecast_value)
+        for item in items
+        if item.category == "TMN"
+    ]
+    maximum_temperatures = [
+        float(item.forecast_value)
+        for item in items
+        if item.category == "TMX"
+    ]
+    return WeatherForecast(
+        city=location.city,
+        condition=_kma_weather_condition(items),
+        minimum_celsius=min(minimum_temperatures or hourly_temperatures),
+        maximum_celsius=max(maximum_temperatures or hourly_temperatures),
+    )
+
+
+KMA_PRECIPITATION_CONDITIONS: Final[dict[int, str]] = {
+    1: "비",
+    2: "비/눈",
+    3: "눈",
+    4: "소나기",
+}
+KMA_SKY_CONDITIONS: Final[dict[int, str]] = {
+    1: "맑음",
+    3: "구름 많음",
+    4: "흐림",
+}
+
+
+def _kma_weather_condition(items: tuple[_KmaForecastItem, ...]) -> str:
+    precipitation_codes = {
+        int(item.forecast_value)
+        for item in items
+        if item.category == "PTY"
+    }
+    for code in (4, 3, 2, 1):
+        if code in precipitation_codes:
+            return KMA_PRECIPITATION_CONDITIONS[code]
+    sky_codes = {
+        int(item.forecast_value)
+        for item in items
+        if item.category == "SKY"
+    }
+    return KMA_SKY_CONDITIONS.get(max(sky_codes, default=1), "맑음")
 
 
 WEATHER_CONDITIONS: Final[dict[int, str]] = {

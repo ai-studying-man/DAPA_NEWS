@@ -4,9 +4,11 @@
 
 목표 발송 시간은 매일 06:30 KST입니다.
 
-- 한국 시간대 Actions cron: `45 5 * * *`
-- UTC 기준 Actions cron: `45 20 * * *`
+- 한국 시간대 최초 실행: 05:45 KST
+- 한국 시간대 백업 실행: 05:50부터 06:15까지 5분 간격
+- UTC 기준 Actions cron: `45,50,55 20 * * *`, `0,5,10,15 21 * * *`
 - GitHub Actions는 05:45부터 뉴스·날씨·실무 참고 메시지를 준비합니다.
+- 최초 예약 또는 job 실패 시 06:20 전까지 60초 간격 재실행을 요청합니다.
 - 준비된 최종 메시지는 JSON으로 저장하며 기사 본문은 저장하지 않습니다.
 - 준비 단계는 06:20 KST 마감 검사를 통과해야 합니다.
 - 같은 Actions 실행이 06:30까지 대기한 뒤 Telegram Bot API를 호출합니다.
@@ -44,18 +46,25 @@ python -m dapa_morning_brief.cli --dry-run
 GitHub Actions cron은 UTC 기준입니다.
 
 ```cron
-45 20 * * *  # 준비 시작: 05:45 KST
+45,50,55 20 * * *  # 05:45, 05:50, 05:55 KST
+0,5,10,15 21 * * * # 06:00, 06:05, 06:10, 06:15 KST
 ```
 
-예약 실행은 05:45에 수집과 Copilot 실무 참고 생성을 시작하고 06:20 마감 검사를
-통과한 `.dapa-prepared/morning-brief.json`을 같은 runner에 유지합니다. 이후 06:30까지
-대기한 뒤 Telegram으로 전송합니다. 같은 날짜에 이미 발송한 기록이 있으면 발송을
-건너뜁니다. 예약 이벤트가 지연되어 06:20 준비 마감이나 06:30 발송 분을 놓치면
-오래된 메시지를 늦게 보내지 않고 실패 상태로 남깁니다.
+05:45가 최초 실행이며 나머지 예약은 GitHub의 예약 누락을 보강합니다. GitHub 예약은
+1분 간격을 지원하지 않으므로 예약 보강은 최소 허용 간격인 5분을 사용합니다. 실행된
+runner 안에서는 준비 명령 실패 시 60초마다 다시 시도합니다. checkout·환경설정 등
+job 자체가 실패하면 `dapa-morning-brief-retry` 내부 이벤트를 60초 뒤 발생시켜 새
+workflow 실행을 요청합니다. 모든 재시도는 06:20 전에만 허용됩니다.
 
-`workflow_dispatch`와 `repository_dispatch`는 Telegram 비밀값을 주입하지 않는
-미리보기 전용 실행입니다. 운영 Telegram 발송은 예약 `scheduled-brief` job에서만
-가능합니다.
+성공한 실행은 `.dapa-prepared/morning-brief.json`을 같은 runner에 유지하고 06:30까지
+대기한 뒤 Telegram으로 전송합니다. production job은 공통 concurrency group과 날짜별
+발송 캐시를 사용하므로 백업 실행이 중복 발송하지 않습니다. 예약 이벤트가 지연되어
+06:20 준비 마감이나 06:30 발송 분을 놓치면 오래된 메시지를 늦게 보내지 않고 실패
+상태로 남깁니다.
+
+사용자가 실행하는 `workflow_dispatch`와 `dapa-morning-brief` repository dispatch는
+Telegram 비밀값을 주입하지 않는 미리보기 전용입니다. 자동 복구용
+`dapa-morning-brief-retry` dispatch만 예약 `scheduled-brief` job으로 연결됩니다.
 
 과천시·대전시 당일 날씨는 Open-Meteo Forecast API의 KMA Seamless 모델을 우선
 사용합니다. KMA 모델 값이 비어 있으면 KMA 단기예보 API 프록시에서 당일 시간별

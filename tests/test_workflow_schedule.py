@@ -9,7 +9,7 @@ def test_workflow_prepares_before_0620_and_sends_at_0630() -> None:
     workflow = workflow_path.read_text(encoding="utf-8")
 
     # Then
-    assert '- cron: "45 20 * * *"' in workflow
+    assert '- cron: "45,50,55 20 * * *"' in workflow
     assert '- cron: "30 21 * * *"' not in workflow
     assert "scheduled-brief:" in workflow
     prepare_command = "--prepare-output .dapa-prepared/morning-brief.json"
@@ -18,10 +18,40 @@ def test_workflow_prepares_before_0620_and_sends_at_0630() -> None:
     assert prepare_command in workflow
     assert send_command in workflow
     assert prepare_deadline in workflow
-    assert workflow.index(prepare_command) < workflow.index(prepare_deadline)
-    assert workflow.index(prepare_deadline) < workflow.index(send_command)
+    prepare_step = workflow.index("- name: Prepare complete morning brief")
+    deadline_step = workflow.index("- name: Enforce 06:20 KST preparation deadline")
+    assert prepare_step < workflow.index(prepare_command) < deadline_step
+    assert deadline_step < workflow.index(send_command)
     assert "send_minute" in workflow
     assert '"06:30"' in workflow
+
+
+def test_workflow_recovers_missed_start_and_retries_failures_until_0620() -> None:
+    # Given
+    workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(
+        encoding="utf-8",
+    )
+
+    # When
+    retry_dispatch = "dapa-morning-brief-retry"
+
+    # Then
+    assert '- cron: "45,50,55 20 * * *"' in workflow
+    assert '- cron: "0,5,10,15 21 * * *"' in workflow
+    assert retry_dispatch in workflow
+    assert "retry-failed-run:" in workflow
+    assert "contents: write" in workflow
+    assert "group: dapa-morning-brief-delivery" in workflow
+    assert workflow.count("sleep 60") >= 2
+    assert "next_retry_epoch" in workflow
+    assert "attempt=$((attempt + 1))" in workflow
+    assert "timeout --foreground" in workflow
+    retry_job = workflow.split("  retry-failed-run:\n", maxsplit=1)[1].split(
+        "  manual-preview:\n",
+        maxsplit=1,
+    )[0]
+    assert "06:20:00" in retry_job
+    assert "--prepared-input" not in retry_job
 
 
 def test_manual_workflow_is_preview_only() -> None:

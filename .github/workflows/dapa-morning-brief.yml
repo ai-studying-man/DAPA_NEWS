@@ -2,14 +2,11 @@ name: DAPA Morning Brief
 
 on:
   schedule:
-    - cron: "45 20 * * *"
+    - cron: "45,50,55 20 * * *"
+    - cron: "0,5,10,15 21 * * *"
   repository_dispatch:
-    types: [dapa-morning-brief]
+    types: [dapa-morning-brief, dapa-morning-brief-retry]
   workflow_dispatch:
-
-concurrency:
-  group: dapa-morning-brief-${{ github.event_name }}
-  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -21,9 +18,15 @@ env:
 
 jobs:
   scheduled-brief:
-    if: github.event_name == 'schedule'
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'repository_dispatch' &&
+      github.event.action == 'dapa-morning-brief-retry')
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    concurrency:
+      group: dapa-morning-brief-delivery
+      cancel-in-progress: false
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -53,10 +56,38 @@ jobs:
         if: steps.sent-cache.outputs.cache-hit != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >-
-          uv run python -m dapa_morning_brief.cli
-          --days 1 --fallback-days 2
-          --prepare-output .dapa-prepared/morning-brief.json
+        run: |
+          deadline_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 06:20:00" +%s)
+          attempt=1
+          while true; do
+            now_epoch=$(TZ=Asia/Seoul date +%s)
+            remaining_seconds=$((deadline_epoch - now_epoch))
+            if [ "$remaining_seconds" -le 0 ]; then
+              echo "Preparation retry deadline reached at 06:20 KST."
+              exit 1
+            fi
+
+            rm -f .dapa-prepared/morning-brief.json
+            echo "Preparation attempt ${attempt}."
+            if timeout --foreground "${remaining_seconds}s" \
+              uv run python -m dapa_morning_brief.cli \
+              --days 1 --fallback-days 2 \
+              --prepare-output .dapa-prepared/morning-brief.json; then
+              if [ -s .dapa-prepared/morning-brief.json ]; then
+                break
+              fi
+            fi
+
+            now_epoch=$(TZ=Asia/Seoul date +%s)
+            next_retry_epoch=$((now_epoch + 60))
+            if [ "$next_retry_epoch" -ge "$deadline_epoch" ]; then
+              echo "No full one-minute retry remains before 06:20 KST."
+              exit 1
+            fi
+            echo "Preparation attempt ${attempt} failed; retrying in 60 seconds."
+            sleep 60
+            attempt=$((attempt + 1))
+          done
       - name: Enforce 06:20 KST preparation deadline
         if: steps.sent-cache.outputs.cache-hit != 'true'
         run: |
@@ -100,8 +131,46 @@ jobs:
           path: .dapa-sent
           key: dapa-morning-brief-${{ steps.kst-date.outputs.today }}
 
+  retry-failed-run:
+    needs: scheduled-brief
+    if: >-
+      always() &&
+      needs.scheduled-brief.result == 'failure' &&
+      (github.event_name == 'schedule' ||
+      (github.event_name == 'repository_dispatch' &&
+      github.event.action == 'dapa-morning-brief-retry'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    steps:
+      - name: Re-dispatch failed run every minute before 06:20 KST
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          deadline_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 06:20:00" +%s)
+          while true; do
+            now_epoch=$(TZ=Asia/Seoul date +%s)
+            next_retry_epoch=$((now_epoch + 60))
+            if [ "$next_retry_epoch" -ge "$deadline_epoch" ]; then
+              echo "Workflow retry deadline reached; no late run will be dispatched."
+              exit 1
+            fi
+
+            sleep 60
+            if gh api --method POST "repos/${GITHUB_REPOSITORY}/dispatches" \
+              -f event_type=dapa-morning-brief-retry; then
+              echo "A replacement workflow run was dispatched."
+              exit 0
+            fi
+            echo "Retry dispatch failed; trying again in 60 seconds."
+          done
+
   manual-preview:
-    if: github.event_name != 'schedule'
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'repository_dispatch' &&
+      github.event.action == 'dapa-morning-brief')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

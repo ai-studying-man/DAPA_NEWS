@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-def test_workflow_prepares_before_0620_and_sends_at_0630() -> None:
+def test_workflow_targets_0620_and_sends_at_or_after_0630() -> None:
     # Given
     workflow_path = Path(".github/workflows/dapa-morning-brief.yml")
 
@@ -13,20 +13,22 @@ def test_workflow_prepares_before_0620_and_sends_at_0630() -> None:
     assert '- cron: "30 21 * * *"' not in workflow
     assert "scheduled-brief:" in workflow
     prepare_command = "--prepare-output .dapa-prepared/morning-brief.json"
-    prepare_deadline = "06:20:00"
+    prepare_target = "06:20:00"
     send_command = "--prepared-input .dapa-prepared/morning-brief.json"
     assert prepare_command in workflow
     assert send_command in workflow
-    assert prepare_deadline in workflow
+    assert prepare_target in workflow
     prepare_step = workflow.index("- name: Prepare complete morning brief")
-    deadline_step = workflow.index("- name: Enforce 06:20 KST preparation deadline")
-    assert prepare_step < workflow.index(prepare_command) < deadline_step
-    assert deadline_step < workflow.index(send_command)
-    assert "send_minute" in workflow
-    assert '"06:30"' in workflow
+    wait_step = workflow.index("- name: Wait until 06:30 KST when early")
+    assert prepare_step < workflow.index(prepare_command) < wait_step
+    assert wait_step < workflow.index(send_command)
+    assert "06:30:00" in workflow
+    assert "sending immediately" in workflow
+    assert "Telegram will not be called" not in workflow
+    assert "restricted to 06:30" not in workflow
 
 
-def test_workflow_recovers_missed_start_and_retries_failures_until_0620() -> None:
+def test_workflow_recovers_missed_start_and_retries_until_delivery() -> None:
     # Given
     workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(
         encoding="utf-8",
@@ -42,15 +44,17 @@ def test_workflow_recovers_missed_start_and_retries_failures_until_0620() -> Non
     assert "retry-failed-run:" in workflow
     assert "contents: write" in workflow
     assert "group: dapa-morning-brief-delivery" in workflow
-    assert workflow.count("sleep 60") >= 2
+    assert "timeout-minutes: 360" in workflow
+    assert workflow.count("sleep 60") >= 3
     assert "next_retry_epoch" in workflow
     assert "attempt=$((attempt + 1))" in workflow
     assert "timeout --foreground" in workflow
+    assert "delivery_attempt=$((delivery_attempt + 1))" in workflow
+    assert "MAX_RETRY_RUNS: 360" in workflow
     retry_job = workflow.split("  retry-failed-run:\n", maxsplit=1)[1].split(
         "  manual-preview:\n",
         maxsplit=1,
     )[0]
-    assert "06:20:00" in retry_job
     assert "--prepared-input" not in retry_job
 
 

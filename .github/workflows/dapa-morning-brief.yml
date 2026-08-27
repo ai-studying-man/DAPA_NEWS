@@ -2,88 +2,142 @@ name: DAPA Morning Brief
 
 on:
   schedule:
-    - cron: "0,15,30 21 * * *"
+    - cron: "45 20 * * *"
+    - cron: "30 21 * * *"
   repository_dispatch:
     types: [dapa-morning-brief]
   workflow_dispatch:
 
 concurrency:
-  group: dapa-morning-brief-${{ github.event_name }}
+  group: dapa-morning-brief-${{ github.event_name }}-${{ github.event.schedule || 'manual' }}
   cancel-in-progress: false
 
 permissions:
   contents: read
   copilot-requests: write
 
+env:
+  PYTHONPATH: src
+  TZ: Asia/Seoul
+
 jobs:
-  send-brief:
+  prepare-brief:
+    if: github.event_name == 'schedule' && github.event.schedule == '45 20 * * *'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30
     env:
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       KSKILL_PROXY_BASE_URL: https://k-skill-proxy.nomadamas.org
-      PYTHONPATH: src
-      TZ: Asia/Seoul
     steps:
       - uses: actions/checkout@v4
       - id: kst-date
         run: echo "today=$(TZ=Asia/Seoul date +%F)" >> "$GITHUB_OUTPUT"
-      - id: sent-cache
-        if: github.event_name == 'schedule'
-        uses: actions/cache/restore@v4
-        with:
-          path: .dapa-sent
-          key: dapa-morning-brief-${{ steps.kst-date.outputs.today }}
       - uses: actions/setup-python@v5
-        if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
         with:
           python-version: "3.11"
       - uses: astral-sh/setup-uv@v5
-        if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
-      - if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
-        run: uv sync
+      - run: uv sync
       - name: Install Copilot CLI
-        if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         run: npm install -g @github/copilot
       - name: Prepare complete morning brief
-        id: prepare
-        if: github.event_name != 'schedule' || steps.sent-cache.outputs.cache-hit != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
           uv run python -m dapa_morning_brief.cli
           --days 1 --fallback-days 2
           --prepare-output .dapa-prepared/morning-brief.json
-      - id: send-window
-        if: github.event_name == 'schedule' && steps.sent-cache.outputs.cache-hit != 'true' && steps.prepare.outcome == 'success'
+      - name: Enforce 06:20 KST preparation deadline
+        run: |
+          now_epoch=$(TZ=Asia/Seoul date +%s)
+          deadline_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 06:20:00" +%s)
+          if [ "$now_epoch" -gt "$deadline_epoch" ]; then
+            echo "Preparation completed after 06:20 KST."
+            exit 1
+          fi
+      - name: Save prepared morning brief
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: .dapa-prepared
+          key: dapa-prepared-${{ steps.kst-date.outputs.today }}
+
+  send-brief:
+    if: github.event_name == 'schedule' && github.event.schedule == '30 21 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: kst-date
+        run: echo "today=$(TZ=Asia/Seoul date +%F)" >> "$GITHUB_OUTPUT"
+      - id: sent-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .dapa-sent
+          key: dapa-morning-brief-${{ steps.kst-date.outputs.today }}
+      - id: prepared-cache
+        if: steps.sent-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: .dapa-prepared
+          key: dapa-prepared-${{ steps.kst-date.outputs.today }}
+      - name: Require prepared morning brief
+        if: steps.sent-cache.outputs.cache-hit != 'true' && steps.prepared-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "Prepared brief cache is missing for ${{ steps.kst-date.outputs.today }}."
+          exit 1
+      - uses: actions/setup-python@v5
+        if: steps.sent-cache.outputs.cache-hit != 'true'
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v5
+        if: steps.sent-cache.outputs.cache-hit != 'true'
+      - if: steps.sent-cache.outputs.cache-hit != 'true'
+        run: uv sync
+      - name: Wait for 06:30 KST send window
+        if: steps.sent-cache.outputs.cache-hit != 'true'
         run: |
           now_epoch=$(TZ=Asia/Seoul date +%s)
           target_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 06:30:00" +%s)
-
           if [ "$now_epoch" -lt "$target_epoch" ]; then
-            sleep_seconds=$((target_epoch - now_epoch))
-            echo "Brief prepared. Waiting ${sleep_seconds}s for 06:30 KST."
-            sleep "$sleep_seconds"
-          else
-            echo "Preparation completed after 06:30 KST; sending now."
+            sleep "$((target_epoch - now_epoch))"
           fi
-          echo "should_send=true" >> "$GITHUB_OUTPUT"
       - name: Send prepared Telegram brief
-        id: telegram_send
-        if: github.event_name != 'schedule' || (steps.send-window.outputs.should_send == 'true' && steps.sent-cache.outputs.cache-hit != 'true')
+        if: steps.sent-cache.outputs.cache-hit != 'true'
         run: >-
           uv run python -m dapa_morning_brief.cli
           --prepared-input .dapa-prepared/morning-brief.json
       - name: Mark scheduled brief sent
-        id: mark_sent
-        if: github.event_name == 'schedule' && steps.telegram_send.outcome == 'success'
+        if: steps.sent-cache.outputs.cache-hit != 'true' && success()
         run: |
           mkdir -p .dapa-sent
           echo "${{ steps.kst-date.outputs.today }}" > ".dapa-sent/${{ steps.kst-date.outputs.today }}"
-      - if: github.event_name == 'schedule' && steps.mark_sent.outcome == 'success'
+      - if: steps.sent-cache.outputs.cache-hit != 'true' && success()
         uses: actions/cache/save@v4
         with:
           path: .dapa-sent
           key: dapa-morning-brief-${{ steps.kst-date.outputs.today }}
+
+  manual-brief:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      KSKILL_PROXY_BASE_URL: https://k-skill-proxy.nomadamas.org
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - name: Install Copilot CLI
+        continue-on-error: true
+        run: npm install -g @github/copilot
+      - name: Collect and send morning brief
+        run: uv run python -m dapa_morning_brief.cli --days 1 --fallback-days 2

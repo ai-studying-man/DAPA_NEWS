@@ -4,11 +4,14 @@
 
 목표 발송 시간은 매일 06:30 KST입니다.
 
-- 한국 시간대 cron: `30 6 * * *`
-- UTC 기준 cron: `30 21 * * *`
-- GitHub Actions는 06:00부터 뉴스·날씨·실무 참고 메시지를 준비합니다.
+- 한국 시간대 준비 cron: `45 5 * * *`
+- 한국 시간대 발송 cron: `30 6 * * *`
+- UTC 기준 준비 cron: `45 20 * * *`
+- UTC 기준 발송 cron: `30 21 * * *`
+- GitHub Actions는 05:45부터 뉴스·날씨·실무 참고 메시지를 준비합니다.
 - 준비된 최종 메시지는 JSON으로 저장하며 기사 본문은 저장하지 않습니다.
-- runner는 준비를 마친 뒤 06:30 KST까지 대기하고 Telegram 전송만 수행합니다.
+- 준비 단계는 06:20 KST 마감 검사를 통과해야 캐시를 저장합니다.
+- 06:30 KST의 별도 Actions 실행은 준비 캐시를 읽고 Telegram 전송만 수행합니다.
 
 ## 필수 환경변수
 
@@ -66,18 +69,21 @@ python -m dapa_morning_brief.cli --dry-run
 
 ## GitHub Actions
 
-GitHub Actions cron은 UTC 기준입니다. 다만 scheduled workflow는 GitHub 큐 상황에
-따라 지연될 수 있으므로 `.github/workflows/dapa-morning-brief.yml`은 아래 UTC
-일정으로 06:00부터 준비 작업을 시작하고 실패 시 다시 시도합니다.
+GitHub Actions cron은 UTC 기준입니다. `.github/workflows/dapa-morning-brief.yml`은
+준비와 발송을 별도 예약 이벤트로 분리합니다.
 
 ```cron
-0,15,30 21 * * *
+45 20 * * *  # 준비 시작: 05:45 KST
+30 21 * * *  # 발송: 06:30 KST
 ```
 
-위 일정은 06:00, 06:15, 06:30 KST에 해당합니다. 첫 실행은 수집과 Copilot 실무
-참고 생성을 끝내고 `.dapa-prepared/morning-brief.json`을 만든 뒤 06:30까지
-대기합니다. 06:30에는 준비된 JSON만 읽어 Telegram으로 전송합니다. 같은 날짜에
-이미 발송한 기록이 있으면 후속 실행은 준비와 발송을 모두 건너뜁니다.
+준비 실행은 수집과 Copilot 실무 참고 생성을 끝내고 06:20 마감 검사를 통과한
+`.dapa-prepared/morning-brief.json`을 Actions 캐시에 저장합니다. 발송 실행은
+06:30에 해당 캐시를 읽어 Telegram으로 전송합니다. 같은 날짜에 이미 발송한
+기록이 있으면 발송을 건너뜁니다. GitHub 예약 이벤트가 06:20 이후로 지연되어
+준비 캐시가 없으면 발송 작업은 오래된 메시지를 보내지 않고 실패 상태로 남깁니다.
+GitHub Actions 예약 시각 자체는 플랫폼 사정에 따라 지연될 수 있으므로, 정각 보장이
+필요한 운영 환경에서는 상시 실행 서버의 cron을 사용해야 합니다.
 
 과천시·대전시 당일 날씨는 Open-Meteo Forecast API의 KMA Seamless 모델을 우선
 사용합니다. KMA 모델 값이 비어 있으면 KMA 단기예보 API 프록시에서 당일 시간별
@@ -85,7 +91,7 @@ GitHub Actions cron은 UTC 기준입니다. 다만 scheduled workflow는 GitHub 
 때만 Open-Meteo 자동 모델로 재조회하며, 그래도 실패한 지역은 `수집 실패`로
 표시하고 전체 뉴스 발송은 계속합니다.
 
-06:00 준비 실행에서는 Copilot CLI를 설치하고 최종 선정 기사 본문으로 20~30자의
+05:45 준비 실행에서는 Copilot CLI를 설치하고 최종 선정 기사 본문으로 20~30자의
 실무 참고 메시지만 생성합니다. 최종 Telegram 메시지와 생성 건수만 준비 JSON에
 저장하며 기사 본문은 저장하지 않습니다. Copilot 설치 실패, 사용 한도 초과,
 응답 오류가 발생하면 기존 키워드 기반 실무 참고 메시지로 자동 대체합니다.

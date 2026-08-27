@@ -4,14 +4,13 @@
 
 목표 발송 시간은 매일 06:30 KST입니다.
 
-- 한국 시간대 준비 cron: `45 5 * * *`
-- 한국 시간대 발송 cron: `30 6 * * *`
-- UTC 기준 준비 cron: `45 20 * * *`
-- UTC 기준 발송 cron: `30 21 * * *`
+- 한국 시간대 Actions cron: `45 5 * * *`
+- UTC 기준 Actions cron: `45 20 * * *`
 - GitHub Actions는 05:45부터 뉴스·날씨·실무 참고 메시지를 준비합니다.
 - 준비된 최종 메시지는 JSON으로 저장하며 기사 본문은 저장하지 않습니다.
-- 준비 단계는 06:20 KST 마감 검사를 통과해야 캐시를 저장합니다.
-- 06:30 KST의 별도 Actions 실행은 준비 캐시를 읽고 Telegram 전송만 수행합니다.
+- 준비 단계는 06:20 KST 마감 검사를 통과해야 합니다.
+- 같은 Actions 실행이 06:30까지 대기한 뒤 Telegram Bot API를 호출합니다.
+- 06:30 발송 분을 놓친 실행은 늦게 보내지 않고 실패합니다.
 
 ## 필수 환경변수
 
@@ -39,51 +38,24 @@ python -m dapa_morning_brief.cli --dry-run
 
 실제 Telegram 발송 전에는 반드시 `--dry-run`으로 메시지 형태를 확인합니다.
 
-## Windows 작업 스케줄러
-
-작업 만들기에서 다음 값을 사용합니다.
-
-- 트리거: 매일 06:30
-- 프로그램: `powershell.exe`
-- 인수:
-
-```text
--NoProfile -ExecutionPolicy Bypass -File C:\Users\dusgh\Desktop\DAPA_NEWS\scripts\run_morning_brief.ps1
-```
-
-환경변수는 사용자 환경변수 또는 작업 스케줄러의 실행 계정에 설정합니다.
-
-## Linux cron
-
-`crontab -e`에 아래 줄을 추가합니다.
-
-```cron
-30 6 * * * cd /path/to/DAPA_NEWS && . .venv/bin/activate && python -m dapa_morning_brief.cli >> logs/dapa_morning_brief.log 2>&1
-```
-
-`uv`를 사용하는 서버라면 다음 형태도 가능합니다.
-
-```cron
-30 6 * * * cd /path/to/DAPA_NEWS && uv run dapa-morning-brief >> logs/dapa_morning_brief.log 2>&1
-```
-
 ## GitHub Actions
 
-GitHub Actions cron은 UTC 기준입니다. `.github/workflows/dapa-morning-brief.yml`은
-준비와 발송을 별도 예약 이벤트로 분리합니다.
+운영 스케줄의 단일 기준은 `.github/workflows/dapa-morning-brief.yml`입니다.
+GitHub Actions cron은 UTC 기준입니다.
 
 ```cron
 45 20 * * *  # 준비 시작: 05:45 KST
-30 21 * * *  # 발송: 06:30 KST
 ```
 
-준비 실행은 수집과 Copilot 실무 참고 생성을 끝내고 06:20 마감 검사를 통과한
-`.dapa-prepared/morning-brief.json`을 Actions 캐시에 저장합니다. 발송 실행은
-06:30에 해당 캐시를 읽어 Telegram으로 전송합니다. 같은 날짜에 이미 발송한
-기록이 있으면 발송을 건너뜁니다. GitHub 예약 이벤트가 06:20 이후로 지연되어
-준비 캐시가 없으면 발송 작업은 오래된 메시지를 보내지 않고 실패 상태로 남깁니다.
-GitHub Actions 예약 시각 자체는 플랫폼 사정에 따라 지연될 수 있으므로, 정각 보장이
-필요한 운영 환경에서는 상시 실행 서버의 cron을 사용해야 합니다.
+예약 실행은 05:45에 수집과 Copilot 실무 참고 생성을 시작하고 06:20 마감 검사를
+통과한 `.dapa-prepared/morning-brief.json`을 같은 runner에 유지합니다. 이후 06:30까지
+대기한 뒤 Telegram으로 전송합니다. 같은 날짜에 이미 발송한 기록이 있으면 발송을
+건너뜁니다. 예약 이벤트가 지연되어 06:20 준비 마감이나 06:30 발송 분을 놓치면
+오래된 메시지를 늦게 보내지 않고 실패 상태로 남깁니다.
+
+`workflow_dispatch`와 `repository_dispatch`는 Telegram 비밀값을 주입하지 않는
+미리보기 전용 실행입니다. 운영 Telegram 발송은 예약 `scheduled-brief` job에서만
+가능합니다.
 
 과천시·대전시 당일 날씨는 Open-Meteo Forecast API의 KMA Seamless 모델을 우선
 사용합니다. KMA 모델 값이 비어 있으면 KMA 단기예보 API 프록시에서 당일 시간별
@@ -105,17 +77,11 @@ TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID
 ```
 
-## Hermes Cronjob
+## 다른 스케줄러
 
-Hermes Cronjob에는 다음 형태로 등록합니다.
-
-```text
-이름: 방산출근길 뉴스레터
-스케줄: 매일 06:30 Asia/Seoul
-명령: uv run dapa-morning-brief --days 1 --fallback-days 2
-전달: Telegram Bot API
-환경변수: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TZ=Asia/Seoul
-```
+Windows 작업 스케줄러, Linux cron, Hermes Cronjob은 현재 운영 발송에 사용하지
+않습니다. 이 도구에 별도 발송 일정을 등록하면 GitHub Actions와 중복되거나 06:30
+외 시간에 전송될 수 있으므로 운영 기준으로 추가하지 않습니다.
 
 ## 수집 우선순위
 

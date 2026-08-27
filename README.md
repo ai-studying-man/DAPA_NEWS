@@ -39,7 +39,8 @@ TELEGRAM_CHAT_ID=6015255978,-1004402722342
 - GitHub Actions에서는 05:45부터 기사를 수집하고 Copilot CLI로 20~30자의 실무
   참고 메시지를 생성해 06:20까지 최종 Telegram 메시지를 JSON으로 준비합니다.
 - 준비 JSON에는 최종 메시지와 생성 건수만 저장하며 기사 본문은 저장하지 않습니다.
-- 06:30에는 별도 Actions 실행이 준비된 JSON만 읽어 Telegram으로 전송합니다.
+- 같은 예약 Actions 실행이 준비된 JSON을 보관한 채 대기하고 06:30에만 Telegram으로
+  전송합니다. 06:30 발송 분을 놓친 실행은 늦게 전송하지 않고 실패합니다.
 - 과천시·대전시의 당일 날씨는 Open-Meteo Forecast API에서 수집해 메시지 상단에
   표시합니다.
 - Open-Meteo KMA Seamless 값이 비어 있으면 기상청 단기예보 API를 우선 사용합니다.

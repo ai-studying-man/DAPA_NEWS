@@ -3,13 +3,12 @@ name: DAPA Morning Brief
 on:
   schedule:
     - cron: "45 20 * * *"
-    - cron: "30 21 * * *"
   repository_dispatch:
     types: [dapa-morning-brief]
   workflow_dispatch:
 
 concurrency:
-  group: dapa-morning-brief-${{ github.event_name }}-${{ github.event.schedule || 'manual' }}
+  group: dapa-morning-brief-${{ github.event_name }}
   cancel-in-progress: false
 
 permissions:
@@ -21,53 +20,14 @@ env:
   TZ: Asia/Seoul
 
 jobs:
-  prepare-brief:
-    if: github.event_name == 'schedule' && github.event.schedule == '45 20 * * *'
+  scheduled-brief:
+    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      KSKILL_PROXY_BASE_URL: https://k-skill-proxy.nomadamas.org
-    steps:
-      - uses: actions/checkout@v4
-      - id: kst-date
-        run: echo "today=$(TZ=Asia/Seoul date +%F)" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - uses: astral-sh/setup-uv@v5
-      - run: uv sync
-      - name: Install Copilot CLI
-        continue-on-error: true
-        run: npm install -g @github/copilot
-      - name: Prepare complete morning brief
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >-
-          uv run python -m dapa_morning_brief.cli
-          --days 1 --fallback-days 2
-          --prepare-output .dapa-prepared/morning-brief.json
-      - name: Enforce 06:20 KST preparation deadline
-        run: |
-          now_epoch=$(TZ=Asia/Seoul date +%s)
-          deadline_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 06:20:00" +%s)
-          if [ "$now_epoch" -gt "$deadline_epoch" ]; then
-            echo "Preparation completed after 06:20 KST."
-            exit 1
-          fi
-      - name: Save prepared morning brief
-        if: success()
-        uses: actions/cache/save@v4
-        with:
-          path: .dapa-prepared
-          key: dapa-prepared-${{ steps.kst-date.outputs.today }}
-
-  send-brief:
-    if: github.event_name == 'schedule' && github.event.schedule == '30 21 * * *'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      KSKILL_PROXY_BASE_URL: https://k-skill-proxy.nomadamas.org
     steps:
       - uses: actions/checkout@v4
       - id: kst-date
@@ -77,17 +37,6 @@ jobs:
         with:
           path: .dapa-sent
           key: dapa-morning-brief-${{ steps.kst-date.outputs.today }}
-      - id: prepared-cache
-        if: steps.sent-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@v4
-        with:
-          path: .dapa-prepared
-          key: dapa-prepared-${{ steps.kst-date.outputs.today }}
-      - name: Require prepared morning brief
-        if: steps.sent-cache.outputs.cache-hit != 'true' && steps.prepared-cache.outputs.cache-hit != 'true'
-        run: |
-          echo "Prepared brief cache is missing for ${{ steps.kst-date.outputs.today }}."
-          exit 1
       - uses: actions/setup-python@v5
         if: steps.sent-cache.outputs.cache-hit != 'true'
         with:
@@ -96,13 +45,44 @@ jobs:
         if: steps.sent-cache.outputs.cache-hit != 'true'
       - if: steps.sent-cache.outputs.cache-hit != 'true'
         run: uv sync
-      - name: Wait for 06:30 KST send window
+      - name: Install Copilot CLI
+        if: steps.sent-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: npm install -g @github/copilot
+      - name: Prepare complete morning brief
+        if: steps.sent-cache.outputs.cache-hit != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          uv run python -m dapa_morning_brief.cli
+          --days 1 --fallback-days 2
+          --prepare-output .dapa-prepared/morning-brief.json
+      - name: Enforce 06:20 KST preparation deadline
+        if: steps.sent-cache.outputs.cache-hit != 'true'
+        run: |
+          now_epoch=$(TZ=Asia/Seoul date +%s)
+          deadline_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 06:20:00" +%s)
+          if [ "$now_epoch" -gt "$deadline_epoch" ]; then
+            echo "Preparation completed after 06:20 KST."
+            exit 1
+          fi
+      - name: Wait for the 06:30 KST send minute
         if: steps.sent-cache.outputs.cache-hit != 'true'
         run: |
           now_epoch=$(TZ=Asia/Seoul date +%s)
           target_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 06:30:00" +%s)
+          latest_epoch=$((target_epoch + 45))
+          if [ "$now_epoch" -gt "$latest_epoch" ]; then
+            echo "06:30 KST send minute was missed; Telegram will not be called."
+            exit 1
+          fi
           if [ "$now_epoch" -lt "$target_epoch" ]; then
             sleep "$((target_epoch - now_epoch))"
+          fi
+          send_minute=$(TZ=Asia/Seoul date +%H:%M)
+          if [ "$send_minute" != "06:30" ]; then
+            echo "Telegram send is restricted to 06:30 KST."
+            exit 1
           fi
       - name: Send prepared Telegram brief
         if: steps.sent-cache.outputs.cache-hit != 'true'
@@ -120,13 +100,11 @@ jobs:
           path: .dapa-sent
           key: dapa-morning-brief-${{ steps.kst-date.outputs.today }}
 
-  manual-brief:
+  manual-preview:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       KSKILL_PROXY_BASE_URL: https://k-skill-proxy.nomadamas.org
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -139,5 +117,7 @@ jobs:
       - name: Install Copilot CLI
         continue-on-error: true
         run: npm install -g @github/copilot
-      - name: Collect and send morning brief
-        run: uv run python -m dapa_morning_brief.cli --days 1 --fallback-days 2
+      - name: Collect and preview morning brief
+        run: >-
+          uv run python -m dapa_morning_brief.cli
+          --days 1 --fallback-days 2 --dry-run

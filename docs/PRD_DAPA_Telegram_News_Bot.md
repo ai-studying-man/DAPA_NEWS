@@ -2,7 +2,7 @@
 
 ## 1. 개요
 
-방위사업청, 국방부, 국방일보, 정책브리핑, 방산 관련 보도자료와 신뢰도 높은 뉴스 RSS를 매일 아침 06:30(KST)에 수집·정리해 텔레그램으로 발송하는 조간 브리핑 봇을 구축한다.
+공개 방위사업 뉴스 RSS를 GitHub Actions가 매일 05:45(KST)에 수집·분류하기 시작해 06:20까지 최종 메시지를 준비하고, 06:30에 Telegram Bot API로 발송하는 조간 브리핑 봇을 구축한다.
 
 이 봇의 목적은 직원들이 출근길에 방위사업, 무기체계, 방산수출, 국방정책 동향을 빠르게 파악하도록 돕는 것이다. 국내외 출장 중이거나 내부망/내부 시스템에 접근하기 어려운 직원도 공개 출처 기반 동향을 확인할 수 있어야 한다.
 
@@ -36,13 +36,14 @@
 
 ## 6. 핵심 사용 시나리오
 
-1. 매일 06:30(KST)에 봇이 공식 RSS와 보조 RSS를 조회한다.
+1. 매일 05:45(KST)에 GitHub Actions 예약 실행이 RSS 조회와 날씨 수집을 시작한다.
 2. 최근 24~72시간 기사 중 방위사업 관련성이 있는 항목과 방사청 필수수집 기사를 남긴다.
 3. 동일 URL, 유사 제목, 동일 연재 머리말, 핵심 개체·사건, RSS 설명 유사도를 이용해 중복 기사를 하나의 스토리로 묶는다.
 4. 중복 스토리에서는 실제 조회수가 가장 높은 원문 기사 1건을 남기고 주식/테마주성 기사를 제거한다. 조회수가 없을 때만 노출순위, 공식성, 최신성을 사용한다.
 5. 규칙 기반으로 섹션을 분류하며 기사 제목과 내용을 요약·합성·재작성하지 않는다.
-6. 텔레그램 채널 또는 단체방에 조간일보 형식으로 발송한다.
-7. 사용자는 출근길 또는 출장 중 모바일에서 핵심 동향과 원문 링크를 확인한다.
+6. 06:20(KST)까지 최종 Telegram 메시지 JSON 준비를 완료한다.
+7. 같은 Actions 실행이 06:30(KST)에 Telegram Bot API를 호출해 조간일보 형식으로 발송한다.
+8. 사용자는 출근길 또는 출장 중 모바일에서 핵심 동향과 원문 링크를 확인한다.
 
 ## 7. 정보 출처 우선순위
 
@@ -122,7 +123,7 @@ KF-21, K2, K9, L-SAM, M-SAM, 유도무기, 무인기, 항공우주
 
 ### FR-1. RSS 수집
 
-- 등록된 RSS 피드를 매일 06:30(KST)에 조회한다.
+- 등록된 RSS 피드를 GitHub Actions가 매일 05:45(KST)에 조회하기 시작한다.
 - 각 항목에서 제목, 링크, 발행일, 출처, RSS 설명을 추출한다.
 - RSS 응답 실패 시 해당 피드만 실패 처리하고 전체 작업은 계속 진행한다.
 
@@ -209,11 +210,12 @@ KF-21, K2, K9, L-SAM, M-SAM, 유도무기, 무인기, 항공우주
 
 ### 스케줄링
 
-- 1순위: Linux 서버/VPS의 `cron` 또는 `systemd timer`
-- 2순위: Windows 작업 스케줄러
-- 3순위: GitHub Actions scheduled workflow
+- 운영 스케줄의 단일 기준은 `.github/workflows/dapa-morning-brief.yml`이다.
+- GitHub Actions scheduled workflow는 UTC `45 20 * * *`에 시작한다.
+- 같은 실행 안에서 06:20 준비 마감을 검사하고 06:30까지 대기한 뒤 Telegram Bot API를 호출한다.
+- 수동 Actions 실행은 미리보기 전용이며 Telegram으로 발송하지 않는다.
 
-주의: GitHub Actions cron은 UTC 기준이며 실행 지연이 있을 수 있다. 06:30 KST는 UTC 21:30(전날)이므로 `30 21 * * *`로 설정한다. 정확한 발송 시간이 중요하면 항상 켜져 있는 서버의 cron을 권장한다.
+주의: GitHub Actions 예약 이벤트는 지연되거나 누락될 수 있다. 준비가 06:20 이후 끝나거나 06:30 발송 분을 놓치면 해당 실행은 Telegram을 늦게 호출하지 않고 실패해야 한다.
 
 ### 기사 처리
 
@@ -235,7 +237,7 @@ TZ=Asia/Seoul
 ## 13. 시스템 아키텍처
 
 ```text
-Scheduler(06:30 KST)
+GitHub Actions Scheduler(05:45 KST)
   -> RSS Collector
   -> Normalizer
   -> Keyword Filter
@@ -243,7 +245,9 @@ Scheduler(06:30 KST)
   -> Ranker
   -> Rule-based Classifier
   -> Telegram Formatter
-  -> telebot Sender
+  -> Preparation Deadline Gate(06:20 KST)
+  -> Send Minute Gate(06:30 KST)
+  -> telebot Sender(06:30 KST only)
   -> Logs
 ```
 
@@ -311,24 +315,18 @@ bot.send_message(
 
 ## 17. 스케줄링 설계
 
-### 17.1 서버 cron 권장
-
-```cron
-30 6 * * * cd /opt/news-dapa && /usr/bin/python -m dapa_news_bot.run_daily
-```
-
-서버 timezone은 `Asia/Seoul`로 설정한다.
-
-### 17.2 GitHub Actions 대안
+### 17.1 GitHub Actions 운영 기준
 
 ```yaml
 on:
   schedule:
-    - cron: "30 21 * * *"  # 06:30 KST
+    - cron: "45 20 * * *"  # 05:45 KST 준비 시작
   workflow_dispatch:
 ```
 
-GitHub Actions는 UTC 기준이며 실행 지연이 있을 수 있으므로 엄밀한 06:30 발송이 필요하면 서버 cron을 사용한다.
+예약 `scheduled-brief` job 하나가 05:45에 수집을 시작하고 06:20까지 준비를 완료한 뒤 06:30까지 대기한다. Telegram 비밀값은 이 job에만 주입한다. 06:30 발송 분을 놓친 실행은 실패하며 늦게 발송하지 않는다. `workflow_dispatch`와 `repository_dispatch`는 `--dry-run` 미리보기만 수행한다.
+
+Windows 작업 스케줄러, Linux cron, Hermes Cronjob에는 별도 운영 발송 일정을 등록하지 않는다. GitHub Actions 이외의 중복 스케줄은 단일 기준과 06:30 발송 제한을 깨뜨릴 수 있다.
 
 ## 18. 데이터 모델
 
@@ -351,7 +349,7 @@ GitHub Actions는 UTC 기준이며 실행 지연이 있을 수 있으므로 엄�
 
 ## 19. 성공 지표
 
-- 평일 06:30~06:35(KST) 내 발송 성공률 95% 이상
+- 매일 06:30(KST) 발송 분 내 Telegram API 호출 성공률 95% 이상
 - 공식/준공식 출처 비중 70% 이상
 - 중복 기사 포함률 2% 이하
 - 서로 다른 사건 오병합률 1% 이하
@@ -371,7 +369,7 @@ GitHub Actions는 UTC 기준이며 실행 지연이 있을 수 있으므로 엄�
 | Telegram 토큰 유출 | `.env`/Secrets 사용, 유출 시 BotFather에서 토큰 재발급 |
 | 비공개 정보 혼입 | 공개 RSS만 입력으로 사용, 내부자료 업로드 금지 |
 | 원문 왜곡 | 선택한 기사의 원문 제목과 URL을 그대로 사용하고 요약·합성·재작성 금지 |
-| GitHub Actions 지연 | 정확한 발송은 서버 cron으로 운영 |
+| GitHub Actions 지연·누락 | 06:20 준비 마감과 06:30 발송 분을 강제하고, 놓친 실행은 늦게 발송하지 않으며 Actions 실패로 확인 |
 
 ## 21. MVP 범위
 

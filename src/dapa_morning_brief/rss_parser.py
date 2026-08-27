@@ -209,8 +209,6 @@ def _is_current_government_news(text: str, title: str) -> bool:
 def _freshness_cutoff(now: datetime, *, days: int) -> datetime:
     kst_now = now.astimezone(KST)
     send_anchor = datetime.combine(kst_now.date(), SEND_WINDOW_START)
-    if kst_now < send_anchor:
-        send_anchor -= timedelta(days=1)
     return (send_anchor - timedelta(days=days)).astimezone(UTC)
 
 

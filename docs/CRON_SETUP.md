@@ -8,9 +8,9 @@
 - 한국 시간대 백업 실행: 05:50부터 06:15까지 5분 간격
 - UTC 기준 Actions cron: `45,50,55 20 * * *`, `0,5,10,15 21 * * *`
 - GitHub Actions는 05:45부터 뉴스·날씨·실무 참고 메시지를 준비합니다.
-- 06:20 KST는 준비 완료 목표이며 실패 시에도 서비스 실행을 중단하지 않습니다.
-- 준비 명령과 Telegram 발송은 성공할 때까지 60초 간격으로 다시 시도합니다.
-- job 자체가 실패하면 60초 뒤 replacement 실행을 요청합니다.
+- 06:20 KST는 준비 완료 목표입니다.
+- 준비 명령과 Telegram 발송은 Actions 실행당 각각 한 번만 시도합니다.
+- 어느 단계든 실패해 job이 실패하면 60초 뒤 replacement 실행을 요청합니다.
 - 준비된 최종 메시지는 JSON으로 저장하며 기사 본문은 저장하지 않습니다.
 - 같은 Actions 실행이 06:30까지 대기한 뒤 Telegram Bot API를 호출합니다.
 - 이미 06:30을 지났다면 대기하지 않고 즉시 Telegram Bot API를 호출합니다.
@@ -52,18 +52,20 @@ GitHub Actions cron은 UTC 기준입니다.
 ```
 
 05:45가 최초 실행이며 나머지 예약은 GitHub의 예약 누락을 보강합니다. GitHub 예약은
-1분 간격을 지원하지 않으므로 예약 보강은 최소 허용 간격인 5분을 사용합니다. 실행된
-runner 안에서는 준비 명령 실패 시 60초마다 다시 시도합니다. checkout·환경설정 등
-job 자체가 실패하면 `dapa-morning-brief-retry` 내부 이벤트를 60초 뒤 발생시켜 새
-workflow 실행을 요청합니다. replacement 실행도 실패하면 같은 규칙을 반복하며,
-비정상 무한 실행을 막기 위해 replacement 횟수는 최대 360회로 제한합니다. 각
-production job은 GitHub-hosted runner 한도에 맞춰 최대 360분 실행됩니다.
+1분 간격을 지원하지 않으므로 예약 보강은 최소 허용 간격인 5분을 사용합니다. 각
+production job은 준비 명령과 Telegram API를 한 번씩만 호출합니다. checkout·환경설정·
+준비·발송 중 어느 단계든 실패하면 `dapa-morning-brief-retry` 내부 이벤트를 60초 뒤
+발생시켜 새 workflow 실행을 요청합니다. replacement 실행도 실패하면 같은 규칙을
+반복하며, replacement 횟수는 최대 360회로 제한합니다. 각 production job은
+GitHub-hosted runner 한도에 맞춰 최대 360분 실행됩니다.
 
 성공한 실행은 `.dapa-prepared/morning-brief.json`을 같은 runner에 유지하고 06:30까지
 대기한 뒤 Telegram으로 전송합니다. production job은 공통 concurrency group과 날짜별
 발송 캐시를 사용하므로 백업 실행이 중복 발송하지 않습니다. 예약 이벤트나 준비가
-지연되어 06:30을 넘기면 준비가 끝나는 즉시 발송하며, Telegram 호출이 실패하면
-성공할 때까지 60초 간격으로 다시 시도합니다.
+지연되어 06:30을 넘기면 준비가 끝나는 즉시 한 번 발송합니다. Telegram 호출이
+실패하면 해당 job을 실패 처리하고 replacement workflow가 전체 실행을 다시 시작합니다.
+Telegram 발송에 성공한 날짜는 완료 캐시에 기록하므로 이후 실행은 발송 단계를
+건너뜁니다.
 
 사용자가 실행하는 `workflow_dispatch`와 `dapa-morning-brief` repository dispatch는
 Telegram 비밀값을 주입하지 않는 미리보기 전용입니다. 자동 복구용

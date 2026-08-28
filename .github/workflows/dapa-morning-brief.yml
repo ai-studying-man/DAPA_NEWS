@@ -59,23 +59,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ready_target_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 06:20:00" +%s)
-          attempt=1
-          while true; do
-            rm -f .dapa-prepared/morning-brief.json
-            echo "Preparation attempt ${attempt}."
-            if timeout --foreground 1200s \
-              uv run python -m dapa_morning_brief.cli \
-              --days 1 --fallback-days 2 \
-              --prepare-output .dapa-prepared/morning-brief.json; then
-              if [ -s .dapa-prepared/morning-brief.json ]; then
-                break
-              fi
-            fi
-
-            echo "Preparation attempt ${attempt} failed; retrying in 60 seconds."
-            sleep 60
-            attempt=$((attempt + 1))
-          done
+          rm -f .dapa-prepared/morning-brief.json
+          timeout --foreground 1200s \
+            uv run python -m dapa_morning_brief.cli \
+            --days 1 --fallback-days 2 \
+            --prepare-output .dapa-prepared/morning-brief.json
+          test -s .dapa-prepared/morning-brief.json
           completed_epoch=$(TZ=Asia/Seoul date +%s)
           if [ "$completed_epoch" -le "$ready_target_epoch" ]; then
             echo "Preparation completed by the 06:20 KST target."
@@ -94,18 +83,9 @@ jobs:
           fi
       - name: Send prepared Telegram brief
         if: steps.sent-cache.outputs.cache-hit != 'true'
-        run: |
-          delivery_attempt=1
-          while true; do
-            if uv run python -m dapa_morning_brief.cli \
-              --prepared-input .dapa-prepared/morning-brief.json; then
-              break
-            fi
-
-            echo "Telegram delivery attempt ${delivery_attempt} failed; retrying in 60 seconds."
-            sleep 60
-            delivery_attempt=$((delivery_attempt + 1))
-          done
+        run: >-
+          uv run python -m dapa_morning_brief.cli
+          --prepared-input .dapa-prepared/morning-brief.json
       - name: Mark scheduled brief sent
         if: steps.sent-cache.outputs.cache-hit != 'true' && success()
         run: |

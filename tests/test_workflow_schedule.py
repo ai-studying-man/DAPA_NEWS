@@ -28,13 +28,17 @@ def test_workflow_targets_0620_and_sends_at_or_after_0630() -> None:
     assert "restricted to 06:30" not in workflow
 
 
-def test_workflow_recovers_missed_start_and_retries_until_delivery() -> None:
+def test_workflow_restarts_failed_run_and_sends_once_per_run() -> None:
     # Given
     workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(
         encoding="utf-8",
     )
 
     # When
+    production_job = workflow.split("  scheduled-brief:\n", maxsplit=1)[1].split(
+        "  retry-failed-run:\n",
+        maxsplit=1,
+    )[0]
     retry_dispatch = "dapa-morning-brief-retry"
 
     # Then
@@ -45,16 +49,18 @@ def test_workflow_recovers_missed_start_and_retries_until_delivery() -> None:
     assert "contents: write" in workflow
     assert "group: dapa-morning-brief-delivery" in workflow
     assert "timeout-minutes: 360" in workflow
-    assert workflow.count("sleep 60") >= 3
-    assert "next_retry_epoch" in workflow
-    assert "attempt=$((attempt + 1))" in workflow
+    assert production_job.count("--prepare-output") == 1
+    assert production_job.count("--prepared-input") == 1
+    assert "while true" not in production_job
+    assert "sleep 60" not in production_job
     assert "timeout --foreground" in workflow
-    assert "delivery_attempt=$((delivery_attempt + 1))" in workflow
     assert "MAX_RETRY_RUNS: 360" in workflow
     retry_job = workflow.split("  retry-failed-run:\n", maxsplit=1)[1].split(
         "  manual-preview:\n",
         maxsplit=1,
     )[0]
+    assert "needs.scheduled-brief.result == 'failure'" in retry_job
+    assert "sleep 60" in retry_job
     assert "--prepared-input" not in retry_job
 
 

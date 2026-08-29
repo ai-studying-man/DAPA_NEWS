@@ -110,6 +110,44 @@ def test_windows_watchdog_task_wakes_at_0545_and_retries_every_minute() -> None:
     assert "-RestartCount 360" in registration_script
 
 
+def test_windows_watchdog_confirms_run_and_records_failure_details() -> None:
+    # Given
+    watchdog_script = Path("scripts/invoke_github_watchdog.ps1").read_text(
+        encoding="utf-8",
+    )
+
+    # When
+    # Then
+    assert "github_watchdog_failures.jsonl" in watchdog_script
+    assert "actions/workflows/dapa-morning-brief.yml/runs" in watchdog_script
+    assert "actions/runs/$RunId/jobs" in watchdog_script
+    assert "accepted but no matching Actions run was created" in watchdog_script
+    assert "Write-FailureRecord" in watchdog_script
+
+
+def test_failed_actions_run_uploads_diagnostics_before_retry() -> None:
+    # Given
+    workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(
+        encoding="utf-8",
+    )
+
+    # When
+    retry_job = workflow.split("  retry-failed-run:\n", maxsplit=1)[1].split(
+        "  manual-preview:\n",
+        maxsplit=1,
+    )[0]
+
+    # Then
+    assert "actions: read" in retry_job
+    assert "failure-report.json" in retry_job
+    assert "GITHUB_STEP_SUMMARY" in retry_job
+    assert "actions/upload-artifact@v4" in retry_job
+    assert "retention-days: 30" in retry_job
+    diagnostics_step = retry_job.index("Collect failed-run diagnostics")
+    retry_step = retry_job.index("Re-dispatch failed workflow run after one minute")
+    assert diagnostics_step < retry_step
+
+
 def test_manual_workflow_is_preview_only() -> None:
     # Given
     workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(

@@ -113,8 +113,75 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     permissions:
+      actions: read
       contents: write
     steps:
+      - name: Collect failed-run diagnostics
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .dapa-diagnostics
+          if ! gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" \
+            > .dapa-diagnostics/jobs.json; then
+            printf '{"jobs":[]}' > .dapa-diagnostics/jobs.json
+          fi
+          jq \
+            --arg run_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --arg event "${GITHUB_EVENT_NAME}" \
+            --arg action "${{ github.event.action || '' }}" \
+            --arg sha "${GITHUB_SHA}" \
+            --arg retry_count "${{ github.event.client_payload.retry_count || '0' }}" \
+            '{
+              recorded_at_utc: (now | todateiso8601),
+              run_url: $run_url,
+              event: $event,
+              action: $action,
+              sha: $sha,
+              retry_count: $retry_count,
+              failed_jobs: [
+                .jobs[] |
+                select(
+                  .conclusion == "failure" or
+                  .conclusion == "cancelled" or
+                  .conclusion == "timed_out" or
+                  .conclusion == "action_required" or
+                  .conclusion == "stale"
+                ) |
+                {
+                  id, name, conclusion, started_at, completed_at,
+                  failed_steps: [
+                    .steps[]? |
+                    select(
+                      .conclusion == "failure" or
+                      .conclusion == "cancelled" or
+                      .conclusion == "timed_out" or
+                      .conclusion == "action_required" or
+                      .conclusion == "stale"
+                    ) |
+                    {number, name, conclusion, started_at, completed_at}
+                  ]
+                }
+              ]
+            }' .dapa-diagnostics/jobs.json \
+            > .dapa-diagnostics/failure-report.json
+          {
+            echo "## DAPA failed-run diagnostics"
+            echo
+            echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "- Event: ${GITHUB_EVENT_NAME}"
+            echo "- Retry count: ${{ github.event.client_payload.retry_count || '0' }}"
+            jq -r '.failed_jobs[] | "- Failed job: \(.name) [\(.conclusion)]", (.failed_steps[] | "  - Step: \(.name) [\(.conclusion)]")' \
+              .dapa-diagnostics/failure-report.json
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload failed-run diagnostics
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: dapa-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .dapa-diagnostics/failure-report.json
+          retention-days: 30
       - name: Re-dispatch failed workflow run after one minute
         env:
           CURRENT_RETRY_RUNS: ${{ github.event.client_payload.retry_count || '0' }}

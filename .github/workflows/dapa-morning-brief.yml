@@ -5,7 +5,10 @@ on:
     - cron: "45,50,55 20 * * *"
     - cron: "0,5,10,15 21 * * *"
   repository_dispatch:
-    types: [dapa-morning-brief, dapa-morning-brief-retry]
+    types:
+      - dapa-morning-brief
+      - dapa-morning-brief-retry
+      - dapa-morning-brief-watchdog
   workflow_dispatch:
 
 permissions:
@@ -22,7 +25,8 @@ jobs:
     if: >-
       github.event_name == 'schedule' ||
       (github.event_name == 'repository_dispatch' &&
-      github.event.action == 'dapa-morning-brief-retry')
+      (github.event.action == 'dapa-morning-brief-retry' ||
+      github.event.action == 'dapa-morning-brief-watchdog'))
     runs-on: ubuntu-latest
     timeout-minutes: 360
     concurrency:
@@ -104,7 +108,8 @@ jobs:
       needs.scheduled-brief.result == 'failure' &&
       (github.event_name == 'schedule' ||
       (github.event_name == 'repository_dispatch' &&
-      github.event.action == 'dapa-morning-brief-retry'))
+      (github.event.action == 'dapa-morning-brief-retry' ||
+      github.event.action == 'dapa-morning-brief-watchdog')))
     runs-on: ubuntu-latest
     timeout-minutes: 360
     permissions:

@@ -91,11 +91,27 @@ TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID
 ```
 
-## 다른 스케줄러
+## Windows watchdog
 
-Windows 작업 스케줄러, Linux cron, Hermes Cronjob은 현재 운영 발송에 사용하지
-않습니다. 이 도구에 별도 발송 일정을 등록하면 GitHub Actions와 중복 전송될 수
-있으므로 운영 기준으로 추가하지 않습니다.
+GitHub `schedule` 이벤트 누락에 대비해 운영 PC의 Windows 작업 스케줄러가 매일
+05:45 KST에 `scripts/invoke_github_watchdog.ps1`을 실행합니다. 이 작업은 PC를
+절전 상태에서 깨우고 `dapa-morning-brief-watchdog` repository dispatch를 GitHub에
+요청합니다. 요청 실패 시 1분 간격으로 최대 360회 재시도합니다.
+
+PC는 Telegram을 직접 호출하지 않습니다. watchdog 이벤트로 시작된 Actions가 기존
+production job과 날짜별 발송 완료 캐시를 그대로 사용하므로 GitHub cron과 watchdog이
+동시에 실행되어도 Telegram 발송은 최초 성공 1회로 제한됩니다.
+
+작업 등록 또는 갱신 명령은 다음과 같습니다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\register_github_watchdog_task.ps1
+```
+
+등록 작업은 `WakeToRun`, `StartWhenAvailable`, 실패 시 1분 간격 재시작을 사용합니다.
+Windows 작업 스케줄러는 절전·최대절전 상태의 PC를 깨울 수 있습니다. 완전히 종료된
+PC를 자동으로 켜려면 메인보드 BIOS의 `Resume By RTC Alarm`도 별도로 설정해야 합니다.
+Linux cron과 Hermes Cronjob은 운영 발송에 사용하지 않습니다.
 
 ## 수집 우선순위
 

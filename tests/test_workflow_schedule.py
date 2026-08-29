@@ -121,6 +121,7 @@ def test_windows_watchdog_confirms_run_and_records_failure_details() -> None:
     assert "github_watchdog_failures.jsonl" in watchdog_script
     assert "actions/workflows/dapa-morning-brief.yml/runs" in watchdog_script
     assert "actions/runs/$RunId/jobs" in watchdog_script
+    assert "([DateTime]$candidate.created_at).ToUniversalTime()" in watchdog_script
     assert "accepted but no matching Actions run was created" in watchdog_script
     assert "Write-FailureRecord" in watchdog_script
 

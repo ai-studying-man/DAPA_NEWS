@@ -164,7 +164,7 @@ for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
                 continue
             }
             foreach ($candidate in @($runsResponse.workflow_runs)) {
-                $createdUtc = [DateTimeOffset]::Parse([string]$candidate.created_at).UtcDateTime
+                $createdUtc = ([DateTime]$candidate.created_at).ToUniversalTime()
                 if (
                     $candidate.display_title -eq "dapa-morning-brief-watchdog" -and
                     $createdUtc -ge $dispatchStartedUtc.AddSeconds(-5)

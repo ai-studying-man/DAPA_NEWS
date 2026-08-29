@@ -105,6 +105,7 @@ def test_windows_watchdog_task_wakes_at_0545_and_retries_every_minute() -> None:
     assert "05:45" in registration_script
     assert "WakeToRun = $true" in registration_script
     assert "StartWhenAvailable = $true" in registration_script
+    assert '"-WindowStyle Hidden"' in registration_script
     assert "-RestartInterval (New-TimeSpan -Minutes 1)" in registration_script
     assert "-RestartCount 360" in registration_script
 

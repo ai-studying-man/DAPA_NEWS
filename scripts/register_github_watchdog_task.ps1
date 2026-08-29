@@ -19,6 +19,7 @@ $actionArguments = @(
     "-NoLogo"
     "-NoProfile"
     "-NonInteractive"
+    "-WindowStyle Hidden"
     "-ExecutionPolicy Bypass"
     "-File `"$WatchdogScript`""
 ) -join " "

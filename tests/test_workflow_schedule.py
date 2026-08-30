@@ -183,6 +183,34 @@ def test_manual_workflow_is_preview_only() -> None:
     assert "TELEGRAM_CHAT_ID" not in manual_job
 
 
+def test_explicit_resend_bypasses_daily_cache_and_retries_delivery() -> None:
+    # Given
+    workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(
+        encoding="utf-8",
+    )
+
+    # When
+    production_job = workflow.split("  scheduled-brief:\n", maxsplit=1)[1].split(
+        "  retry-failed-run:\n",
+        maxsplit=1,
+    )[0]
+    retry_job = workflow.split("  retry-failed-run:\n", maxsplit=1)[1].split(
+        "  manual-preview:\n",
+        maxsplit=1,
+    )[0]
+    manual_job = workflow.split("  manual-preview:\n", maxsplit=1)[1]
+
+    # Then
+    assert "resend:" in workflow
+    assert "type: boolean" in workflow
+    assert "FORCE_DELIVERY:" in production_job
+    assert "inputs.resend" in production_job
+    assert production_job.count("env.FORCE_DELIVERY == 'true'") >= 7
+    assert "client_payload[force_send]" in retry_job
+    assert "inputs.resend" in retry_job
+    assert "inputs.resend != true" in manual_job
+
+
 def test_workflow_does_not_bootstrap_press_release_cache() -> None:
     # Given
     workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(

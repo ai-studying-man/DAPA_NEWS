@@ -10,6 +10,12 @@ on:
       - dapa-morning-brief-retry
       - dapa-morning-brief-watchdog
   workflow_dispatch:
+    inputs:
+      resend:
+        description: Recollect and resend today's Telegram brief once
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -24,6 +30,7 @@ jobs:
   scheduled-brief:
     if: >-
       github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.resend) ||
       (github.event_name == 'repository_dispatch' &&
       (github.event.action == 'dapa-morning-brief-retry' ||
       github.event.action == 'dapa-morning-brief-watchdog'))
@@ -36,6 +43,9 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       KSKILL_PROXY_BASE_URL: https://k-skill-proxy.nomadamas.org
+      FORCE_DELIVERY: >-
+        ${{ (github.event_name == 'workflow_dispatch' && inputs.resend) ||
+        github.event.client_payload.force_send == true }}
     steps:
       - uses: actions/checkout@v4
       - id: kst-date
@@ -46,19 +56,29 @@ jobs:
           path: .dapa-sent
           key: dapa-morning-brief-${{ steps.kst-date.outputs.today }}
       - uses: actions/setup-python@v5
-        if: steps.sent-cache.outputs.cache-hit != 'true'
+        if: >-
+          steps.sent-cache.outputs.cache-hit != 'true' ||
+          env.FORCE_DELIVERY == 'true'
         with:
           python-version: "3.11"
       - uses: astral-sh/setup-uv@v5
-        if: steps.sent-cache.outputs.cache-hit != 'true'
-      - if: steps.sent-cache.outputs.cache-hit != 'true'
+        if: >-
+          steps.sent-cache.outputs.cache-hit != 'true' ||
+          env.FORCE_DELIVERY == 'true'
+      - if: >-
+          steps.sent-cache.outputs.cache-hit != 'true' ||
+          env.FORCE_DELIVERY == 'true'
         run: uv sync
       - name: Install Copilot CLI
-        if: steps.sent-cache.outputs.cache-hit != 'true'
+        if: >-
+          steps.sent-cache.outputs.cache-hit != 'true' ||
+          env.FORCE_DELIVERY == 'true'
         continue-on-error: true
         run: npm install -g @github/copilot
       - name: Prepare complete morning brief
-        if: steps.sent-cache.outputs.cache-hit != 'true'
+        if: >-
+          steps.sent-cache.outputs.cache-hit != 'true' ||
+          env.FORCE_DELIVERY == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -76,14 +96,18 @@ jobs:
             echo "Preparation completed after the 06:20 KST target; delivery will continue."
           fi
       - name: Upload prepared brief diagnostics
-        if: steps.sent-cache.outputs.cache-hit != 'true'
+        if: >-
+          steps.sent-cache.outputs.cache-hit != 'true' ||
+          env.FORCE_DELIVERY == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: dapa-prepared-${{ github.run_id }}
           path: .dapa-prepared/morning-brief.json
           retention-days: 30
       - name: Wait until 06:30 KST when early
-        if: steps.sent-cache.outputs.cache-hit != 'true'
+        if: >-
+          steps.sent-cache.outputs.cache-hit != 'true' ||
+          env.FORCE_DELIVERY == 'true'
         run: |
           now_epoch=$(TZ=Asia/Seoul date +%s)
           target_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 06:30:00" +%s)
@@ -93,7 +117,9 @@ jobs:
             echo "06:30 KST target was missed; sending immediately."
           fi
       - name: Send prepared Telegram brief
-        if: steps.sent-cache.outputs.cache-hit != 'true'
+        if: >-
+          steps.sent-cache.outputs.cache-hit != 'true' ||
+          env.FORCE_DELIVERY == 'true'
         run: >-
           uv run python -m dapa_morning_brief.cli
           --prepared-input .dapa-prepared/morning-brief.json
@@ -114,6 +140,7 @@ jobs:
       always() &&
       needs.scheduled-brief.result == 'failure' &&
       (github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.resend) ||
       (github.event_name == 'repository_dispatch' &&
       (github.event.action == 'dapa-morning-brief-retry' ||
       github.event.action == 'dapa-morning-brief-watchdog')))
@@ -192,6 +219,9 @@ jobs:
       - name: Re-dispatch failed workflow run after one minute
         env:
           CURRENT_RETRY_RUNS: ${{ github.event.client_payload.retry_count || '0' }}
+          FORCE_SEND: >-
+            ${{ (github.event_name == 'workflow_dispatch' && inputs.resend) ||
+            github.event.client_payload.force_send || false }}
           GH_TOKEN: ${{ github.token }}
         run: |
           case "$CURRENT_RETRY_RUNS" in
@@ -211,7 +241,8 @@ jobs:
             sleep 60
             if gh api --method POST "repos/${GITHUB_REPOSITORY}/dispatches" \
               -f event_type=dapa-morning-brief-retry \
-              -F "client_payload[retry_count]=${next_retry_runs}"; then
+              -F "client_payload[retry_count]=${next_retry_runs}" \
+              -F "client_payload[force_send]=${FORCE_SEND}"; then
               echo "A replacement workflow run was dispatched."
               exit 0
             fi
@@ -220,7 +251,7 @@ jobs:
 
   manual-preview:
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && inputs.resend != true) ||
       (github.event_name == 'repository_dispatch' &&
       github.event.action == 'dapa-morning-brief')
     runs-on: ubuntu-latest

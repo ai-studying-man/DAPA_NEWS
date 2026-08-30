@@ -179,8 +179,32 @@ def test_manual_workflow_is_preview_only() -> None:
 
     # Then
     assert "--dry-run" in manual_job
+    assert "--prepare-output .dapa-preview/morning-brief.json" in manual_job
+    assert "--prepared-input .dapa-preview/morning-brief.json" in manual_job
+    assert "GITHUB_TOKEN: ${{ github.token }}" in manual_job
+    assert "npm install -g @github/copilot" in manual_job
+    assert "dapa-ai-preview-${{ github.run_id }}" in manual_job
     assert "TELEGRAM_BOT_TOKEN" not in manual_job
     assert "TELEGRAM_CHAT_ID" not in manual_job
+
+
+def test_production_brief_uses_actions_token_for_copilot() -> None:
+    # Given
+    workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(
+        encoding="utf-8",
+    )
+
+    # When
+    production_job = workflow.split("  scheduled-brief:\n", maxsplit=1)[1].split(
+        "  retry-failed-run:\n",
+        maxsplit=1,
+    )[0]
+
+    # Then
+    assert "copilot-requests: write" in workflow
+    assert "npm install -g @github/copilot" in production_job
+    assert "GITHUB_TOKEN: ${{ github.token }}" in production_job
+    assert "GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}" not in production_job
 
 
 def test_copilot_smoke_test_calls_model_without_telegram_delivery() -> None:
@@ -202,7 +226,7 @@ def test_copilot_smoke_test_calls_model_without_telegram_delivery() -> None:
     assert "copilot-requests: write" in smoke_job
     assert "GITHUB_TOKEN: ${{ github.token }}" in smoke_job
     assert "npm install -g @github/copilot" in smoke_job
-    assert 'Reply with exactly COPILOT_OK and nothing else.' in smoke_job
+    assert "Reply with exactly COPILOT_OK and nothing else." in smoke_job
     assert "COPILOT_OK" in smoke_job
     assert "actions/upload-artifact@v4" in smoke_job
     assert "include-hidden-files: true" in smoke_job

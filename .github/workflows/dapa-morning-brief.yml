@@ -148,7 +148,7 @@ jobs:
           steps.sent-cache.outputs.cache-hit != 'true' ||
           env.FORCE_DELIVERY == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           ready_target_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 06:20:00" +%s)
           rm -f .dapa-prepared/morning-brief.json
@@ -327,7 +327,7 @@ jobs:
     timeout-minutes: 30
     env:
       KSKILL_PROXY_BASE_URL: https://k-skill-proxy.nomadamas.org
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -338,7 +338,21 @@ jobs:
       - name: Install Copilot CLI
         continue-on-error: true
         run: npm install -g @github/copilot
-      - name: Collect and preview morning brief
+      - name: Prepare AI-powered morning brief without Telegram
         run: >-
           uv run python -m dapa_morning_brief.cli
-          --days 1 --fallback-days 2 --dry-run
+          --days 1 --fallback-days 2
+          --prepare-output .dapa-preview/morning-brief.json
+      - name: Preview prepared morning brief without Telegram
+        run: >-
+          uv run python -m dapa_morning_brief.cli
+          --prepared-input .dapa-preview/morning-brief.json
+          --dry-run
+      - name: Upload AI preview diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dapa-ai-preview-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .dapa-preview/morning-brief.json
+          include-hidden-files: true
+          retention-days: 7

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from unittest.mock import patch
 
 import httpx
 
 from dapa_morning_brief.article_content import (
+    _filter_articles_by_publisher_date,
     extract_main_text,
     fetch_article_bodies,
     resolve_article_url,
@@ -97,3 +98,100 @@ def test_fetch_article_bodies_skips_sections_without_practice_points() -> None:
     # Then
     assert [body.article_url for body in bodies] == [policy.url]
     assert get.call_count == 1
+
+
+def test_publisher_date_filter_rejects_resurfaced_old_google_article() -> None:
+    # Given
+    article = Article(
+        title="미래를 위한 새로운 시작, 2021 방위사업청",
+        url="https://news.google.com/rss/articles/old",
+        published_at=datetime(2026, 8, 29, 6, 10, tzinfo=UTC),
+        source="대한민국 정책브리핑",
+        section=Section.POLICY,
+    )
+    response = httpx.Response(
+        200,
+        text=(
+            '<html><head><meta property="article:published_time" '
+            'content="2021-10-22T09:00:00+09:00"></head></html>'
+        ),
+        request=httpx.Request("GET", "https://www.korea.kr/old"),
+    )
+
+    # When
+    with (
+        patch(
+            "dapa_morning_brief.article_content.resolve_article_url",
+            return_value="https://www.korea.kr/old",
+        ),
+        patch.object(httpx.Client, "get", return_value=response),
+    ):
+        result = _filter_articles_by_publisher_date(
+            [article],
+            as_of=date(2026, 8, 30),
+            max_age_days=2,
+        )
+
+    # Then
+    assert result.articles == ()
+    assert result.checked_google == 1
+    assert result.unverifiable == 0
+    assert [(item.title, item.publisher_date) for item in result.rejected] == [
+        (article.title, date(2021, 10, 22)),
+    ]
+
+
+def test_publisher_date_filter_keeps_current_and_excludes_unverifiable(
+) -> None:
+    # Given
+    current = Article(
+        title="방위사업청, 최신 조달지침 발표",
+        url="https://news.google.com/rss/articles/current",
+        published_at=datetime(2026, 8, 29, 7, tzinfo=UTC),
+        source="테스트뉴스",
+        section=Section.POLICY,
+    )
+    unavailable = Article(
+        title="방위사업청, 시험평가 일정 점검",
+        url="https://news.google.com/rss/articles/unavailable",
+        published_at=datetime(2026, 8, 29, 8, tzinfo=UTC),
+        source="테스트뉴스",
+        section=Section.POLICY,
+    )
+    current_response = httpx.Response(
+        200,
+        text=(
+            '<html><head><meta property="article:published_time" '
+            'content="2026-08-29T16:00:00+09:00"></head></html>'
+        ),
+        request=httpx.Request("GET", "https://publisher.example/current"),
+    )
+
+    def resolve(url: str) -> str:
+        return url.replace("https://news.google.com/rss/articles/", "https://publisher.example/")
+
+    def get(url: str) -> httpx.Response:
+        if url.endswith("current"):
+            return current_response
+        message = "publisher unavailable"
+        raise httpx.ConnectError(message)
+
+    # When
+    with (
+        patch(
+            "dapa_morning_brief.article_content.resolve_article_url",
+            side_effect=resolve,
+        ),
+        patch.object(httpx.Client, "get", side_effect=get),
+    ):
+        result = _filter_articles_by_publisher_date(
+            [current, unavailable],
+            as_of=date(2026, 8, 30),
+            max_age_days=2,
+        )
+
+    # Then
+    assert result.articles == (current,)
+    assert result.checked_google == 2
+    assert result.rejected == ()
+    assert result.unverifiable == 1

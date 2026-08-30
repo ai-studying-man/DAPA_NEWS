@@ -75,6 +75,13 @@ jobs:
           else
             echo "Preparation completed after the 06:20 KST target; delivery will continue."
           fi
+      - name: Upload prepared brief diagnostics
+        if: steps.sent-cache.outputs.cache-hit != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dapa-prepared-${{ github.run_id }}
+          path: .dapa-prepared/morning-brief.json
+          retention-days: 30
       - name: Wait until 06:30 KST when early
         if: steps.sent-cache.outputs.cache-hit != 'true'
         run: |

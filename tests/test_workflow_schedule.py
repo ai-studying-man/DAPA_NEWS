@@ -149,6 +149,25 @@ def test_failed_actions_run_uploads_diagnostics_before_retry() -> None:
     assert diagnostics_step < retry_step
 
 
+def test_successful_run_retains_exact_prepared_brief_for_diagnostics() -> None:
+    # Given
+    workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(
+        encoding="utf-8",
+    )
+
+    # When
+    production_job = workflow.split("  scheduled-brief:\n", maxsplit=1)[1].split(
+        "  retry-failed-run:\n",
+        maxsplit=1,
+    )[0]
+
+    # Then
+    assert "Upload prepared brief diagnostics" in production_job
+    assert "dapa-prepared-${{ github.run_id }}" in production_job
+    assert "path: .dapa-prepared/morning-brief.json" in production_job
+    assert "retention-days: 30" in production_job
+
+
 def test_manual_workflow_is_preview_only() -> None:
     # Given
     workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(

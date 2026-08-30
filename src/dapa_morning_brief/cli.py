@@ -12,7 +12,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final
 from zoneinfo import ZoneInfo
 
-from dapa_morning_brief.article_content import fetch_article_bodies
+from dapa_morning_brief.article_content import (
+    _filter_articles_by_publisher_date,
+    fetch_article_bodies,
+)
 from dapa_morning_brief.briefing import build_briefing, format_telegram_message
 from dapa_morning_brief.collector import collect_articles
 from dapa_morning_brief.copilot_summary import summarize_article_bodies
@@ -26,13 +29,19 @@ from dapa_morning_brief.telegram import (
 from dapa_morning_brief.weather import collect_weather_forecasts
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterable, Sequence
+
+    from dapa_morning_brief.models import Article
 
 DEFAULT_DAYS: Final = 1
 DEFAULT_FALLBACK_DAYS: Final = 2
 KST: Final[ZoneInfo] = ZoneInfo("Asia/Seoul")
 COPILOT_SUMMARY_TEMPLATE: Final = (
     "Copilot summary: generated={generated} fallback={fallback} bodies={bodies}\n"
+)
+FRESHNESS_SUMMARY_TEMPLATE: Final = (
+    "Publisher freshness ({days}d): checked={checked} accepted={accepted} "
+    "stale={stale} unverifiable={unverifiable}\n"
 )
 PREPARED_BRIEF_TEMPLATE: Final = "Prepared brief saved: {path}\n"
 BODY_DEDUP_CANDIDATE_MULTIPLIER: Final = 3
@@ -92,6 +101,14 @@ def _prepare_brief(
         include_google=args.include_google,
         only_google=args.google_only,
     )
+    articles = list(
+        _validated_candidates(
+            articles,
+            today=today,
+            max_age_days=days,
+            max_per_section=max_per_section,
+        ),
+    )
     missing_sections = set(Section).difference(article.section for article in articles)
     if missing_sections and args.fallback_days > days:
         fallback_articles = collect_articles(
@@ -100,28 +117,35 @@ def _prepare_brief(
             only_google=False,
         )
         articles.extend(
-            article
-            for article in fallback_articles
-            if article.section in missing_sections
+            _validated_candidates(
+                (
+                    article
+                    for article in fallback_articles
+                    if article.section in missing_sections
+                ),
+                today=today,
+                max_age_days=args.fallback_days,
+                max_per_section=max_per_section,
+            ),
         )
 
+    candidate_briefing = build_briefing(
+        articles,
+        max_per_section=max_per_section * BODY_DEDUP_CANDIDATE_MULTIPLIER,
+    )
+    candidate_articles = tuple(
+        chain.from_iterable(candidate_briefing.sections.values()),
+    )
     article_bodies = ()
     if generate_practice_points:
-        candidate_briefing = build_briefing(
-            articles,
-            max_per_section=max_per_section * BODY_DEDUP_CANDIDATE_MULTIPLIER,
-        )
         article_bodies = fetch_article_bodies(candidate_briefing)
-        candidate_articles = tuple(
-            chain.from_iterable(candidate_briefing.sections.values()),
-        )
         briefing = build_briefing(
             candidate_articles,
             max_per_section=max_per_section,
             article_bodies=article_bodies,
         )
     else:
-        briefing = build_briefing(articles, max_per_section=max_per_section)
+        briefing = build_briefing(candidate_articles, max_per_section=max_per_section)
     weather_forecasts = collect_weather_forecasts(as_of=today)
     practice_points = ()
     selected_count = sum(
@@ -158,6 +182,51 @@ def _prepare_brief(
             selected_count - len(practice_points) if generate_practice_points else 0
         ),
     )
+
+
+def _validated_candidates(
+    articles: Iterable[Article],
+    *,
+    today: date,
+    max_age_days: int,
+    max_per_section: int,
+) -> tuple[Article, ...]:
+    candidate_briefing = build_briefing(
+        articles,
+        max_per_section=max_per_section * BODY_DEDUP_CANDIDATE_MULTIPLIER,
+    )
+    candidates = tuple(chain.from_iterable(candidate_briefing.sections.values()))
+    freshness = _filter_articles_by_publisher_date(
+        candidates,
+        as_of=today,
+        max_age_days=max_age_days,
+    )
+    if freshness.checked_google:
+        accepted = (
+            freshness.checked_google
+            - len(freshness.rejected)
+            - freshness.unverifiable
+        )
+        _ = sys.stderr.write(
+            FRESHNESS_SUMMARY_TEMPLATE.format(
+                days=max_age_days,
+                checked=freshness.checked_google,
+                accepted=accepted,
+                stale=len(freshness.rejected),
+                unverifiable=freshness.unverifiable,
+            ),
+        )
+        for rejection in freshness.rejected:
+            _ = sys.stderr.write(
+                "Freshness excluded: "
+                f"publisher_date={rejection.publisher_date.isoformat()} "
+                f"title={rejection.title}\n",
+            )
+        for title in freshness.unverified_titles:
+            _ = sys.stderr.write(
+                f"Freshness excluded: publisher_date=unverifiable title={title}\n",
+            )
+    return freshness.articles
 
 
 def _send_prepared(args: BriefNamespace, *, today: date, path: Path) -> int:

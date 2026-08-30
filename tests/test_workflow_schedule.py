@@ -183,6 +183,34 @@ def test_manual_workflow_is_preview_only() -> None:
     assert "TELEGRAM_CHAT_ID" not in manual_job
 
 
+def test_copilot_smoke_test_calls_model_without_telegram_delivery() -> None:
+    # Given
+    workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(
+        encoding="utf-8",
+    )
+
+    # When
+    smoke_job = workflow.split("  copilot-smoke-test:\n", maxsplit=1)[1].split(
+        "  scheduled-brief:\n",
+        maxsplit=1,
+    )[0]
+    manual_job = workflow.split("  manual-preview:\n", maxsplit=1)[1]
+
+    # Then
+    assert "copilot_test:" in workflow
+    assert "inputs.copilot_test == true" in smoke_job
+    assert "copilot-requests: write" in smoke_job
+    assert "GITHUB_TOKEN: ${{ github.token }}" in smoke_job
+    assert "npm install -g @github/copilot" in smoke_job
+    assert 'Reply with exactly COPILOT_OK and nothing else.' in smoke_job
+    assert "COPILOT_OK" in smoke_job
+    assert "actions/upload-artifact@v4" in smoke_job
+    assert "TELEGRAM_BOT_TOKEN" not in smoke_job
+    assert "TELEGRAM_CHAT_ID" not in smoke_job
+    assert "dapa_morning_brief.cli" not in smoke_job
+    assert "inputs.copilot_test != true" in manual_job
+
+
 def test_explicit_resend_bypasses_daily_cache_and_retries_delivery() -> None:
     # Given
     workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(

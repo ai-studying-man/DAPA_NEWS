@@ -16,6 +16,11 @@ on:
         required: false
         type: boolean
         default: false
+      copilot_test:
+        description: Test Copilot CLI without collecting or sending news
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -27,6 +32,68 @@ env:
   MAX_RETRY_RUNS: 360
 
 jobs:
+  copilot-smoke-test:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.copilot_test == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      copilot-requests: write
+    steps:
+      - name: Install Copilot CLI
+        run: npm install -g @github/copilot
+      - name: Call Copilot model
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .copilot-smoke/logs
+          copilot --version | tee .copilot-smoke/version.txt
+
+          set +e
+          copilot \
+            -s \
+            --no-ask-user \
+            --model auto \
+            --log-level error \
+            --log-dir .copilot-smoke/logs \
+            -p "Reply with exactly COPILOT_OK and nothing else." \
+            > .copilot-smoke/response.txt \
+            2> .copilot-smoke/stderr.txt
+          copilot_exit_code=$?
+          set -e
+
+          printf '%s\n' "$copilot_exit_code" > .copilot-smoke/exit-code.txt
+          echo "Copilot CLI exit code: $copilot_exit_code"
+          if [ "$copilot_exit_code" -ne 0 ]; then
+            echo "Copilot CLI error output:"
+            sed -n '1,80p' .copilot-smoke/stderr.txt
+            exit "$copilot_exit_code"
+          fi
+
+          normalized_response=$(tr -d '\r\n' < .copilot-smoke/response.txt)
+          echo "Copilot model response: $normalized_response"
+          if [ "$normalized_response" != "COPILOT_OK" ]; then
+            echo "Copilot returned an unexpected response."
+            exit 1
+          fi
+
+          {
+            echo "## Copilot smoke test"
+            echo
+            echo "- Authentication: successful"
+            echo "- Model response: COPILOT_OK"
+            echo "- Telegram delivery: not invoked"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload Copilot diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: copilot-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .copilot-smoke
+          retention-days: 7
+
   scheduled-brief:
     if: >-
       github.event_name == 'schedule' ||
@@ -251,7 +318,8 @@ jobs:
 
   manual-preview:
     if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.resend != true) ||
+      (github.event_name == 'workflow_dispatch' &&
+      inputs.resend != true && inputs.copilot_test != true) ||
       (github.event_name == 'repository_dispatch' &&
       github.event.action == 'dapa-morning-brief')
     runs-on: ubuntu-latest

@@ -205,6 +205,7 @@ def test_copilot_smoke_test_calls_model_without_telegram_delivery() -> None:
     assert 'Reply with exactly COPILOT_OK and nothing else.' in smoke_job
     assert "COPILOT_OK" in smoke_job
     assert "actions/upload-artifact@v4" in smoke_job
+    assert "include-hidden-files: true" in smoke_job
     assert "TELEGRAM_BOT_TOKEN" not in smoke_job
     assert "TELEGRAM_CHAT_ID" not in smoke_job
     assert "dapa_morning_brief.cli" not in smoke_job

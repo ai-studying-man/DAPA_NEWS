@@ -92,6 +92,7 @@ jobs:
         with:
           name: copilot-smoke-${{ github.run_id }}-${{ github.run_attempt }}
           path: .copilot-smoke
+          include-hidden-files: true
           retention-days: 7
 
   scheduled-brief:

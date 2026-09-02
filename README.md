@@ -36,19 +36,18 @@ TELEGRAM_CHAT_ID=6015255978,-1004402722342
 - 정책브리핑 및 국방부 RSS는 사용하지 않습니다.
 - 최근 1일 기사를 기본 대상으로 하며, 부족하면 2일까지 확장할 수 있습니다.
 - 섹션별 최대 5건을 선정하되, 동일 사건의 유사 기사는 언론사가 달라도 1건만 남깁니다.
-- GitHub Actions에서는 05:45부터 기사를 수집하고 Copilot CLI로 20~30자의 실무
-  참고 메시지를 생성해 06:20을 목표로 최종 Telegram 메시지를 JSON으로 준비합니다.
-- 05:45 예약 누락에 대비해 05:50부터 06:15까지 5분 간격 백업 예약을 두며,
-  준비와 Telegram 발송은 Actions 실행당 각각 한 번만 시도합니다. 어느 단계든
-  실패하면 60초 뒤 replacement 실행을 요청합니다.
-- Windows PC 작업 스케줄러도 매일 05:45 KST에 PC를 깨우고
-  `dapa-morning-brief-watchdog` 이벤트를 GitHub에 요청합니다. GitHub 요청이 실패하면
-  PC에서 1분 간격으로 최대 360회 재시도하며, Telegram 발송은 계속 Actions에서만
-  수행합니다.
+- cron-job.org가 매일 05:30 KST에 `dapa-morning-brief` repository dispatch를
+  요청합니다. Actions가 05:45 전에 시작되면 그 시각까지 대기한 뒤 기사를 수집하고,
+  06:20을 목표로 최종 Telegram 메시지를 JSON으로 준비합니다.
+- 준비가 끝난 Actions는 06:30 KST까지 유지된 뒤 Telegram을 한 번 발송합니다. 06:30
+  이후 준비가 끝나면 즉시 발송하며, 실패한 실행은 제한된 횟수만 replacement 실행으로
+  복구합니다.
+- 날짜별 발송 완료 cache와 concurrency를 사용해 cron-job.org 중복 요청이나 수동
+  실행이 발생해도 Telegram 중복 발송을 막습니다.
 - 준비 JSON에는 최종 메시지와 생성 건수만 저장하며 기사 본문은 저장하지 않습니다.
-- 같은 예약 Actions 실행이 준비된 JSON을 보관한 채 06:30까지 대기합니다. 이미
-  06:30을 지났다면 즉시 한 번 발송합니다. 성공한 날짜는 발송 완료로 기록해 백업
-  예약이나 replacement 실행에서 다시 발송하지 않습니다.
+- 미발송 Actions 실행은 준비된 JSON을 보관한 채 06:30까지 대기합니다. 이미
+  06:30을 지났다면 즉시 한 번 발송합니다. 성공한 날짜는 발송 완료로 기록해 중복
+  cron-job.org 요청이나 replacement 실행에서 다시 발송하지 않습니다.
 - 과천시·대전시의 당일 날씨는 Open-Meteo Forecast API에서 수집해 메시지 상단에
   표시합니다.
 - Open-Meteo KMA Seamless 값이 비어 있으면 기상청 단기예보 API를 우선 사용합니다.
@@ -59,4 +58,5 @@ TELEGRAM_CHAT_ID=6015255978,-1004402722342
 
 ## 예약 실행
 
-자세한 설정은 [docs/CRON_SETUP.md](docs/CRON_SETUP.md)를 참고하세요.
+자세한 운영 설정은 [docs/cron-job-org.md](docs/cron-job-org.md)와
+[docs/CRON_SETUP.md](docs/CRON_SETUP.md)를 참고하세요.

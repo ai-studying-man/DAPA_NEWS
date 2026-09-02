@@ -4,13 +4,12 @@
 
 목표 발송 시간은 매일 06:30 KST입니다.
 
-- 한국 시간대 최초 실행: 05:45 KST
-- 한국 시간대 백업 실행: 05:50부터 06:15까지 5분 간격
-- UTC 기준 Actions cron: `45,50,55 20 * * *`, `0,5,10,15 21 * * *`
-- GitHub Actions는 05:45부터 뉴스·날씨·실무 참고 메시지를 준비합니다.
+- cron-job.org 요청: 매일 05:30 KST
+- repository dispatch: `dapa-morning-brief`
+- GitHub Actions는 05:45 전 시작 시 그 시각까지 대기한 뒤 뉴스·날씨·실무 참고 메시지를 준비합니다.
 - 06:20 KST는 준비 완료 목표입니다.
 - 준비 명령과 Telegram 발송은 Actions 실행당 각각 한 번만 시도합니다.
-- 어느 단계든 실패해 job이 실패하면 60초 뒤 replacement 실행을 요청합니다.
+- 어느 단계든 실패해 job이 실패하면 60초 뒤 제한된 횟수의 replacement 실행을 요청합니다.
 - 준비된 최종 메시지는 JSON으로 저장하며 기사 본문은 저장하지 않습니다.
 - 같은 Actions 실행이 06:30까지 대기한 뒤 Telegram Bot API를 호출합니다.
 - 이미 06:30을 지났다면 대기하지 않고 즉시 Telegram Bot API를 호출합니다.
@@ -43,33 +42,27 @@ python -m dapa_morning_brief.cli --dry-run
 
 ## GitHub Actions
 
-운영 스케줄의 단일 기준은 `.github/workflows/dapa-morning-brief.yml`입니다.
-GitHub Actions cron은 UTC 기준입니다.
+운영 스케줄의 단일 기준은 cron-job.org입니다. `.github/workflows/dapa-morning-brief.yml`은
+`repository_dispatch`를 받아 production job을 실행합니다.
 
-```cron
-45,50,55 20 * * *  # 05:45, 05:50, 05:55 KST
-0,5,10,15 21 * * * # 06:00, 06:05, 06:10, 06:15 KST
-```
+cron-job.org가 05:30 KST에 `dapa-morning-brief` 이벤트를 요청합니다. 각 production job은
+준비 명령과 Telegram API를 한 번씩만 호출합니다. checkout·환경설정·준비·발송 중 어느
+단계든 실패하면 `dapa-morning-brief-retry` 내부 이벤트를 60초 뒤 발생시켜 새 workflow
+실행을 요청합니다. replacement 실행은 최대 5회로 제한하며, production job은 120분,
+retry job은 15분 실행 한도를 사용합니다.
 
-05:45가 최초 실행이며 나머지 예약은 GitHub의 예약 누락을 보강합니다. GitHub 예약은
-1분 간격을 지원하지 않으므로 예약 보강은 최소 허용 간격인 5분을 사용합니다. 각
-production job은 준비 명령과 Telegram API를 한 번씩만 호출합니다. checkout·환경설정·
-준비·발송 중 어느 단계든 실패하면 `dapa-morning-brief-retry` 내부 이벤트를 60초 뒤
-발생시켜 새 workflow 실행을 요청합니다. replacement 실행도 실패하면 같은 규칙을
-반복하며, replacement 횟수는 최대 360회로 제한합니다. 각 production job은
-GitHub-hosted runner 한도에 맞춰 최대 360분 실행됩니다.
-
-성공한 실행은 `.dapa-prepared/morning-brief.json`을 같은 runner에 유지하고 06:30까지
-대기한 뒤 Telegram으로 전송합니다. production job은 공통 concurrency group과 날짜별
-발송 캐시를 사용하므로 백업 실행이 중복 발송하지 않습니다. 예약 이벤트나 준비가
-지연되어 06:30을 넘기면 준비가 끝나는 즉시 한 번 발송합니다. Telegram 호출이
+성공한 실행은 먼저 날짜별 발송 cache를 확인합니다. 이미 발송된 날이면 05:45 대기와
+뉴스 수집을 건너뛰고 종료합니다. 미발송이면 `.dapa-prepared/morning-brief.json`을
+생성하고 06:30까지 대기한 뒤 Telegram으로 전송합니다. production job은 공통 concurrency
+group과 날짜별 발송 cache를 사용하므로 중복 요청이 발생해도 중복 발송하지 않습니다.
+준비가 지연되어 06:30을 넘기면 준비가 끝나는 즉시 한 번 발송합니다. Telegram 호출이
 실패하면 해당 job을 실패 처리하고 replacement workflow가 전체 실행을 다시 시작합니다.
 Telegram 발송에 성공한 날짜는 완료 캐시에 기록하므로 이후 실행은 발송 단계를
 건너뜁니다.
 
-사용자가 실행하는 `workflow_dispatch`와 `dapa-morning-brief` repository dispatch는
-Telegram 비밀값을 주입하지 않는 미리보기 전용입니다. 자동 복구용
-`dapa-morning-brief-retry` dispatch만 예약 `scheduled-brief` job으로 연결됩니다.
+사용자가 실행하는 `workflow_dispatch`는 기존 입력에 따라 preview 또는 명시적 resend를
+수행합니다. `dapa-morning-brief`와 `dapa-morning-brief-watchdog` repository dispatch는
+production `scheduled-brief`로 연결되고, `dapa-morning-brief-retry`는 자동 복구용입니다.
 
 과천시·대전시 당일 날씨는 Open-Meteo Forecast API의 KMA Seamless 모델을 우선
 사용합니다. KMA 모델 값이 비어 있으면 KMA 단기예보 API 프록시에서 당일 시간별
@@ -91,27 +84,20 @@ TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID
 ```
 
-## Windows watchdog
+## Windows watchdog (비상용)
 
-GitHub `schedule` 이벤트 누락에 대비해 운영 PC의 Windows 작업 스케줄러가 매일
-05:45 KST에 `scripts/invoke_github_watchdog.ps1`을 실행합니다. 이 작업은 PC를
-절전 상태에서 깨우고 `dapa-morning-brief-watchdog` repository dispatch를 GitHub에
-요청합니다. 요청 실패 시 1분 간격으로 최대 360회 재시도합니다.
-
-PC는 Telegram을 직접 호출하지 않습니다. watchdog 이벤트로 시작된 Actions가 기존
-production job과 날짜별 발송 완료 캐시를 그대로 사용하므로 GitHub cron과 watchdog이
-동시에 실행되어도 Telegram 발송은 최초 성공 1회로 제한됩니다.
-
-작업 등록 또는 갱신 명령은 다음과 같습니다.
+운영 발송은 cron-job.org가 담당하므로 Windows PC가 켜져 있거나 watchdog 프로그램이
+실행 중일 필요가 없습니다. 기존 `dapa-morning-brief-watchdog` 이벤트와 PowerShell
+스크립트는 비상용 호환 경로로 남겨두지만, cron-job.org가 안정적으로 확인되면 작업
+스케줄러 등록 작업은 비활성화하는 것을 권장합니다. 기존 작업은 삭제하지 않아야
+필요할 때 다시 활성화할 수 있습니다.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\register_github_watchdog_task.ps1
+Disable-ScheduledTask -TaskName "DAPA Morning Brief Watchdog"
 ```
 
-등록 작업은 `WakeToRun`, `StartWhenAvailable`, 실패 시 1분 간격 재시작을 사용합니다.
-Windows 작업 스케줄러는 절전·최대절전 상태의 PC를 깨울 수 있습니다. 완전히 종료된
-PC를 자동으로 켜려면 메인보드 BIOS의 `Resume By RTC Alarm`도 별도로 설정해야 합니다.
-Linux cron과 Hermes Cronjob은 운영 발송에 사용하지 않습니다.
+복구가 필요하면 `Enable-ScheduledTask`를 사용합니다. Linux cron과 Hermes Cronjob은
+운영 발송에 사용하지 않습니다.
 
 ## 수집 우선순위
 

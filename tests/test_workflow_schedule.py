@@ -9,8 +9,8 @@ def test_workflow_targets_0620_and_sends_at_or_after_0630() -> None:
     workflow = workflow_path.read_text(encoding="utf-8")
 
     # Then
-    assert '- cron: "45,50,55 20 * * *"' in workflow
-    assert '- cron: "30 21 * * *"' not in workflow
+    assert "  schedule:" not in workflow
+    assert "dapa-morning-brief" in workflow
     assert "scheduled-brief:" in workflow
     prepare_command = "--prepare-output .dapa-prepared/morning-brief.json"
     prepare_target = "06:20:00"
@@ -42,19 +42,18 @@ def test_workflow_restarts_failed_run_and_sends_once_per_run() -> None:
     retry_dispatch = "dapa-morning-brief-retry"
 
     # Then
-    assert '- cron: "45,50,55 20 * * *"' in workflow
-    assert '- cron: "0,5,10,15 21 * * *"' in workflow
+    assert "  schedule:" not in workflow
     assert retry_dispatch in workflow
     assert "retry-failed-run:" in workflow
     assert "contents: write" in workflow
     assert "group: dapa-morning-brief-delivery" in workflow
-    assert "timeout-minutes: 360" in workflow
+    assert "timeout-minutes: 120" in production_job
     assert production_job.count("--prepare-output") == 1
     assert production_job.count("--prepared-input") == 1
     assert "while true" not in production_job
     assert "sleep 60" not in production_job
     assert "timeout --foreground" in workflow
-    assert "MAX_RETRY_RUNS: 360" in workflow
+    assert "MAX_RETRY_RUNS: 5" in workflow
     retry_job = workflow.split("  retry-failed-run:\n", maxsplit=1)[1].split(
         "  manual-preview:\n",
         maxsplit=1,
@@ -108,6 +107,35 @@ def test_windows_watchdog_task_wakes_at_0545_and_retries_every_minute() -> None:
     assert '"-WindowStyle Hidden"' in registration_script
     assert "-RestartInterval (New-TimeSpan -Minutes 1)" in registration_script
     assert "-RestartCount 360" in registration_script
+
+
+def test_primary_dispatch_waits_for_collection_target_after_cache_check() -> None:
+    workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(
+        encoding="utf-8",
+    )
+
+    production_job = workflow.split("  scheduled-brief:\n", maxsplit=1)[1].split(
+        "  retry-failed-run:\n",
+        maxsplit=1,
+    )[0]
+
+    assert "github.event.action == 'dapa-morning-brief'" in production_job
+    cache_step = production_job.index("id: sent-cache")
+    wait_step = production_job.index("Wait until 05:45 KST before collection")
+    assert cache_step < wait_step
+    assert "05:45:00" in production_job
+    assert "Waiting ${wait_seconds}s until 05:45 KST" in production_job
+    assert "05:45 KST has already passed. Starting immediately." in production_job
+
+
+def test_primary_dispatch_is_not_a_manual_preview() -> None:
+    workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(
+        encoding="utf-8",
+    )
+
+    manual_job = workflow.split("  manual-preview:\n", maxsplit=1)[1]
+
+    assert "github.event.action == 'dapa-morning-brief'" not in manual_job
 
 
 def test_windows_watchdog_confirms_run_and_records_failure_details() -> None:

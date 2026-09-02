@@ -2,7 +2,7 @@
 
 ## 1. 개요
 
-공개 방위사업 뉴스 RSS를 GitHub Actions가 매일 05:45(KST)에 수집·분류하기 시작해 06:20까지 최종 메시지 준비를 목표로 하고, 06:30에 Telegram Bot API 발송을 목표로 하는 조간 브리핑 봇을 구축한다. 실행이 실패하면 60초 뒤 replacement workflow로 복구해 당일 브리핑 발송을 다시 시도한다.
+공개 방위사업 뉴스 RSS를 cron-job.org가 매일 05:30(KST)에 GitHub Actions로 요청하고, Actions가 05:45(KST)에 수집·분류를 시작해 06:20까지 최종 메시지 준비를 목표로 하며, 06:30에 Telegram Bot API 발송을 목표로 하는 조간 브리핑 봇을 구축한다. 실행이 실패하면 60초 뒤 제한된 횟수의 replacement workflow로 복구해 당일 브리핑 발송을 다시 시도한다.
 
 이 봇의 목적은 직원들이 출근길에 방위사업, 무기체계, 방산수출, 국방정책 동향을 빠르게 파악하도록 돕는 것이다. 국내외 출장 중이거나 내부망/내부 시스템에 접근하기 어려운 직원도 공개 출처 기반 동향을 확인할 수 있어야 한다.
 
@@ -36,8 +36,8 @@
 
 ## 6. 핵심 사용 시나리오
 
-1. 매일 05:45(KST)에 GitHub Actions 예약 실행이 RSS 조회와 날씨 수집을 시작한다.
-   예약 누락 시 05:50부터 06:15까지 5분 간격 백업 예약이 실행을 보강한다.
+1. cron-job.org가 매일 05:30(KST)에 `dapa-morning-brief` repository dispatch를 요청한다.
+   Actions가 05:45 전에 시작되면 05:45까지 대기한 뒤 RSS 조회와 날씨 수집을 시작한다.
 2. 최근 24~72시간 기사 중 방위사업 관련성이 있는 항목과 방사청 필수수집 기사를 남긴다.
 3. 동일 URL, 유사 제목, 동일 연재 머리말, 핵심 개체·사건, RSS 설명 유사도를 이용해 중복 기사를 하나의 스토리로 묶는다.
 4. 중복 스토리에서는 실제 조회수가 가장 높은 원문 기사 1건을 남기고 주식/테마주성 기사를 제거한다. 조회수가 없을 때만 노출순위, 공식성, 최신성을 사용한다.
@@ -124,7 +124,8 @@ KF-21, K2, K9, L-SAM, M-SAM, 유도무기, 무인기, 항공우주
 
 ### FR-1. RSS 수집
 
-- 등록된 RSS 피드를 GitHub Actions가 매일 05:45(KST)에 조회하기 시작한다.
+- 등록된 RSS 피드를 GitHub Actions가 매일 05:45(KST)에 조회하기 시작한다. 시작 요청은
+  cron-job.org의 05:30(KST) `repository_dispatch`로 전달된다.
 - 각 항목에서 제목, 링크, 발행일, 출처, RSS 설명을 추출한다.
 - RSS 응답 실패 시 해당 피드만 실패 처리하고 전체 작업은 계속 진행한다.
 
@@ -212,17 +213,21 @@ KF-21, K2, K9, L-SAM, M-SAM, 유도무기, 무인기, 항공우주
 
 ### 스케줄링
 
-- 운영 스케줄의 단일 기준은 `.github/workflows/dapa-morning-brief.yml`이다.
-- 최초 scheduled workflow는 05:45 KST에 시작하고, 05:50부터 06:15까지 5분 간격
-  백업 예약을 둔다.
+- 운영 스케줄의 단일 기준은 cron-job.org의 매일 05:30 KST 요청이다.
+- cron-job.org는 `dapa-morning-brief` repository dispatch를 호출하고, Actions는
+  05:45 KST까지 대기한 뒤 수집을 시작한다.
 - 준비 명령과 Telegram 발송은 production job당 각각 한 번만 시도한다.
-- 어느 단계든 production job이 실패하면 60초 뒤 replacement 실행을 요청한다.
+- 어느 단계든 production job이 실패하면 60초 뒤 replacement 실행을 요청하며, replacement는
+  최대 5회로 제한한다.
 - Telegram 발송에 성공한 날짜는 완료 상태로 기록하고 이후 실행에서는 발송하지 않는다.
 - 06:20은 준비 완료 목표로 기록하고, 06:30 이전에 준비되면 해당 시각까지 대기한다.
 - 06:30 이후에 준비되면 즉시 Telegram Bot API를 호출한다.
-- 수동 Actions 실행은 미리보기 전용이며 Telegram으로 발송하지 않는다.
+- 수동 Actions 실행은 기존 입력에 따라 미리보기 또는 명시적 재발송을 수행한다.
 
-주의: GitHub Actions 예약 이벤트는 지연되거나 누락될 수 있고 예약 cron의 최소 간격은 5분이다. 따라서 예약 누락은 5분 간격으로, 실행 실패는 1분 뒤 replacement workflow로 복구한다. 한 production job 안에서 준비나 Telegram 발송을 반복하지 않는다. production job은 최대 360분 실행하며, 연속 실패는 최대 360회의 replacement 실행으로 제한한다.
+주의: GitHub Actions 자체 schedule은 사용하지 않는다. cron-job.org가 workflow 시작을 담당하고,
+이미 시작된 Actions의 Python/API/Telegram 실패만 60초 뒤 최대 5회 replacement workflow로
+복구한다. 한 production job 안에서 준비나 Telegram 발송을 반복하지 않는다. production job은
+최대 120분 실행한다.
 
 ### 기사 처리
 
@@ -244,8 +249,9 @@ TZ=Asia/Seoul
 ## 13. 시스템 아키텍처
 
 ```text
-GitHub Actions Scheduler(05:45 KST)
-  -> Backup Schedules(05:50~06:15, every 5 minutes)
+cron-job.org(05:30 KST)
+  -> repository_dispatch(dapa-morning-brief)
+  -> Wait Until Collection Target(05:45 KST)
   -> RSS Collector
   -> Normalizer
   -> Keyword Filter
@@ -329,19 +335,19 @@ bot.send_message(
 
 ```yaml
 on:
-  schedule:
-    - cron: "45,50,55 20 * * *"
-    - cron: "0,5,10,15 21 * * *"
   repository_dispatch:
-    types: [dapa-morning-brief, dapa-morning-brief-retry]
+    types: [dapa-morning-brief, dapa-morning-brief-retry, dapa-morning-brief-watchdog]
   workflow_dispatch:
 ```
 
-05:45가 최초 실행이며 05:50~06:15 예약은 누락 보강용이다. 예약 실행들은 공통 concurrency group으로 직렬화하고 날짜별 발송 캐시로 중복 전송을 막는다. 각 production job은 준비 CLI와 Telegram API를 한 번씩만 호출한다. 어느 단계든 실패하면 `GITHUB_TOKEN`으로 `dapa-morning-brief-retry` repository dispatch를 60초 뒤 요청한다. replacement 실행도 실패하면 같은 규칙을 최대 360회 반복한다. 각 production job은 최대 360분 실행한다.
+cron-job.org의 05:30 요청이 primary trigger다. Actions는 날짜별 발송 캐시를 먼저 확인하고,
+미발송이면 05:45까지 대기한 뒤 준비 CLI와 Telegram API를 각각 한 번씩만 호출한다. 어느
+단계든 실패하면 `GITHUB_TOKEN`으로 `dapa-morning-brief-retry` repository dispatch를 60초
+뒤 요청하며 replacement 실행은 최대 5회다. 각 production job은 최대 120분 실행한다.
 
-성공한 `scheduled-brief` job은 06:30 이전이면 해당 시각까지 대기한 뒤 Telegram Bot API를 한 번 호출한다. 06:30을 넘겼다면 즉시 한 번 호출한다. 호출 실패는 job 실패로 처리해 replacement workflow가 전체 실행을 다시 시작한다. 호출 성공 후에는 날짜별 완료 캐시를 저장하며 이후 예약이나 replacement 실행은 발송하지 않는다. Telegram 비밀값은 이 production job에만 주입한다. 사용자가 실행하는 `workflow_dispatch`와 일반 `dapa-morning-brief` repository dispatch는 `--dry-run` 미리보기만 수행한다.
+성공한 `scheduled-brief` job은 06:30 이전이면 해당 시각까지 대기한 뒤 Telegram Bot API를 한 번 호출한다. 06:30을 넘겼다면 즉시 한 번 호출한다. 호출 실패는 job 실패로 처리해 replacement workflow가 전체 실행을 다시 시작한다. 호출 성공 후에는 날짜별 완료 캐시를 저장하며 이후 요청이나 replacement 실행에서는 발송하지 않는다. Telegram 비밀값은 이 production job에만 주입한다. 사용자가 실행하는 `workflow_dispatch`는 기존 입력에 따라 preview 또는 명시적 resend를 수행한다.
 
-Windows 작업 스케줄러, Linux cron, Hermes Cronjob에는 별도 운영 발송 일정을 등록하지 않는다. GitHub Actions 이외의 중복 스케줄은 단일 기준을 깨뜨리고 중복 발송을 일으킬 수 있다.
+Windows 작업 스케줄러, Linux cron, Hermes Cronjob에는 별도 운영 발송 일정을 등록하지 않는다. cron-job.org 이외의 중복 스케줄은 단일 기준을 깨뜨리고 불필요한 workflow 실행을 만들 수 있다.
 
 ## 18. 데이터 모델
 
@@ -385,7 +391,7 @@ Windows 작업 스케줄러, Linux cron, Hermes Cronjob에는 별도 운영 발�
 | Telegram 토큰 유출 | `.env`/Secrets 사용, 유출 시 BotFather에서 토큰 재발급 |
 | 비공개 정보 혼입 | 공개 RSS만 입력으로 사용, 내부자료 업로드 금지 |
 | 원문 왜곡 | 선택한 기사의 원문 제목과 URL을 그대로 사용하고 요약·합성·재작성 금지 |
-| GitHub Actions 지연·누락 | 05:50~06:15의 5분 간격 백업 예약으로 시작 누락을 보강하고, 실행 실패는 60초 뒤 replacement workflow로 복구하며 06:30 이후에는 즉시 1회 발송 시도 |
+| 외부 요청·Actions 실패 | cron-job.org가 05:30에 primary dispatch를 요청하고, 시작된 workflow의 실패는 60초 뒤 최대 5회 replacement로 복구하며 06:30 이후에는 즉시 1회 발송 시도 |
 
 ## 21. MVP 범위
 

@@ -10,12 +10,12 @@ cron-job.org에서 다음과 같이 설정합니다.
 
 ```text
 Schedule: Every day
-Time: 05:30
+Time: 05:40
 Timezone: Asia/Seoul
 ```
 
-05:30에 Actions를 먼저 시작하고, workflow가 05:45 KST까지 대기한 뒤 뉴스 수집을
-시작합니다. 준비가 06:20 이전에 끝나면 06:30까지 대기하고, 늦게 끝나면 즉시
+05:40에 Actions를 먼저 시작하고, workflow가 06:00 KST까지 대기한 뒤 뉴스 수집을
+시작합니다. 준비가 06:25 이전에 끝나면 06:30까지 대기하고, 늦게 끝나면 즉시
 Telegram으로 발송합니다.
 
 ## HTTP request

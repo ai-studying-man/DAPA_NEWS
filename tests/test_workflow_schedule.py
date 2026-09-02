@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-def test_workflow_targets_0620_and_sends_at_or_after_0630() -> None:
+def test_workflow_targets_0625_and_sends_at_or_after_0630() -> None:
     # Given
     workflow_path = Path(".github/workflows/dapa-morning-brief.yml")
 
@@ -13,7 +13,7 @@ def test_workflow_targets_0620_and_sends_at_or_after_0630() -> None:
     assert "dapa-morning-brief" in workflow
     assert "scheduled-brief:" in workflow
     prepare_command = "--prepare-output .dapa-prepared/morning-brief.json"
-    prepare_target = "06:20:00"
+    prepare_target = "06:25:00"
     send_command = "--prepared-input .dapa-prepared/morning-brief.json"
     assert prepare_command in workflow
     assert send_command in workflow
@@ -122,11 +122,11 @@ def test_primary_dispatch_waits_for_collection_target_after_cache_check() -> Non
 
     assert "github.event.action == 'dapa-morning-brief'" in production_job
     cache_step = production_job.index("id: sent-cache")
-    wait_step = production_job.index("Wait until 05:45 KST before collection")
+    wait_step = production_job.index("Wait until 06:00 KST before collection")
     assert cache_step < wait_step
-    assert "05:45:00" in production_job
-    assert "Waiting ${wait_seconds}s until 05:45 KST" in production_job
-    assert "05:45 KST has already passed. Starting immediately." in production_job
+    assert "06:00:00" in production_job
+    assert "Waiting ${wait_seconds}s until 06:00 KST" in production_job
+    assert "06:00 KST has already passed. Starting immediately." in production_job
 
 
 def test_primary_dispatch_is_not_a_manual_preview() -> None:

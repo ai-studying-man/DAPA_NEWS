@@ -120,8 +120,8 @@ jobs:
           echo "[DAPA Morning Brief]"
           echo "Trigger: ${GITHUB_EVENT_NAME} / ${{ github.event.action || 'workflow_dispatch' }}"
           echo "Current KST: $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M:%S %Z')"
-          echo "Collection target: 05:45 KST"
-          echo "Preparation target: 06:20 KST"
+          echo "Collection target: 06:00 KST"
+          echo "Preparation target: 06:25 KST"
           echo "Telegram send target: 06:30 KST"
       - id: sent-cache
         uses: actions/cache/restore@v4
@@ -131,19 +131,19 @@ jobs:
       - name: Log Telegram sent status
         run: >-
           echo "Telegram sent today: ${{ steps.sent-cache.outputs.cache-hit == 'true' }}"
-      - name: Wait until 05:45 KST before collection
+      - name: Wait until 06:00 KST before collection
         if: >-
           steps.sent-cache.outputs.cache-hit != 'true' &&
           env.FORCE_DELIVERY != 'true'
         run: |
           now_epoch=$(TZ=Asia/Seoul date +%s)
-          target_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 05:45:00" +%s)
+          target_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 06:00:00" +%s)
           wait_seconds=$((target_epoch - now_epoch))
           if [ "$wait_seconds" -gt 0 ]; then
-            echo "Waiting ${wait_seconds}s until 05:45 KST..."
+            echo "Waiting ${wait_seconds}s until 06:00 KST..."
             sleep "$wait_seconds"
           else
-            echo "05:45 KST has already passed. Starting immediately."
+            echo "06:00 KST has already passed. Starting immediately."
           fi
       - uses: actions/setup-python@v5
         if: >-
@@ -172,7 +172,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          ready_target_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 06:20:00" +%s)
+          ready_target_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 06:25:00" +%s)
           rm -f .dapa-prepared/morning-brief.json
           timeout --foreground 1200s \
             uv run python -m dapa_morning_brief.cli \
@@ -182,10 +182,10 @@ jobs:
           completed_epoch=$(TZ=Asia/Seoul date +%s)
           if [ "$completed_epoch" -le "$ready_target_epoch" ]; then
             echo "Preparation completed: $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M:%S %Z')"
-            echo "Preparation completed by the 06:20 KST target."
+            echo "Preparation completed by the 06:25 KST target."
           else
             echo "Preparation completed: $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M:%S %Z')"
-            echo "WARNING: Preparation completed after the 06:20 KST target; delivery will continue."
+            echo "WARNING: Preparation completed after the 06:25 KST target; delivery will continue."
           fi
       - name: Upload prepared brief diagnostics
         if: >-

@@ -2,7 +2,7 @@
 
 ## 1. 개요
 
-공개 방위사업 뉴스 RSS를 cron-job.org가 매일 05:30(KST)에 GitHub Actions로 요청하고, Actions가 05:45(KST)에 수집·분류를 시작해 06:20까지 최종 메시지 준비를 목표로 하며, 06:30에 Telegram Bot API 발송을 목표로 하는 조간 브리핑 봇을 구축한다. 실행이 실패하면 60초 뒤 제한된 횟수의 replacement workflow로 복구해 당일 브리핑 발송을 다시 시도한다.
+공개 방위사업 뉴스 RSS를 cron-job.org가 매일 05:40(KST)에 GitHub Actions로 요청하고, Actions가 06:00(KST)에 수집·분류를 시작해 06:25까지 최종 메시지 준비를 목표로 하며, 06:30에 Telegram Bot API 발송을 목표로 하는 조간 브리핑 봇을 구축한다. 실행이 실패하면 60초 뒤 제한된 횟수의 replacement workflow로 복구해 당일 브리핑 발송을 다시 시도한다.
 
 이 봇의 목적은 직원들이 출근길에 방위사업, 무기체계, 방산수출, 국방정책 동향을 빠르게 파악하도록 돕는 것이다. 국내외 출장 중이거나 내부망/내부 시스템에 접근하기 어려운 직원도 공개 출처 기반 동향을 확인할 수 있어야 한다.
 
@@ -36,13 +36,13 @@
 
 ## 6. 핵심 사용 시나리오
 
-1. cron-job.org가 매일 05:30(KST)에 `dapa-morning-brief` repository dispatch를 요청한다.
-   Actions가 05:45 전에 시작되면 05:45까지 대기한 뒤 RSS 조회와 날씨 수집을 시작한다.
+1. cron-job.org가 매일 05:40(KST)에 `dapa-morning-brief` repository dispatch를 요청한다.
+   Actions가 06:00 전에 시작되면 06:00까지 대기한 뒤 RSS 조회와 날씨 수집을 시작한다.
 2. 최근 24~72시간 기사 중 방위사업 관련성이 있는 항목과 방사청 필수수집 기사를 남긴다.
 3. 동일 URL, 유사 제목, 동일 연재 머리말, 핵심 개체·사건, RSS 설명 유사도를 이용해 중복 기사를 하나의 스토리로 묶는다.
 4. 중복 스토리에서는 실제 조회수가 가장 높은 원문 기사 1건을 남기고 주식/테마주성 기사를 제거한다. 조회수가 없을 때만 노출순위, 공식성, 최신성을 사용한다.
 5. 규칙 기반으로 섹션을 분류하며 기사 제목과 내용을 요약·합성·재작성하지 않는다.
-6. 06:20(KST)을 목표로 최종 Telegram 메시지 JSON 준비를 완료한다. 목표 시각을 넘겨도 준비를 계속한다.
+6. 06:25(KST)을 목표로 최종 Telegram 메시지 JSON 준비를 완료한다. 목표 시각을 넘겨도 준비를 계속한다.
 7. 같은 Actions 실행이 06:30(KST)에 Telegram Bot API를 한 번 호출한다. 이미 목표 시각을 넘겼다면 즉시 호출하고, 실패하면 60초 뒤 replacement workflow가 전체 실행을 다시 시작한다.
 8. 사용자는 출근길 또는 출장 중 모바일에서 핵심 동향과 원문 링크를 확인한다.
 
@@ -124,8 +124,8 @@ KF-21, K2, K9, L-SAM, M-SAM, 유도무기, 무인기, 항공우주
 
 ### FR-1. RSS 수집
 
-- 등록된 RSS 피드를 GitHub Actions가 매일 05:45(KST)에 조회하기 시작한다. 시작 요청은
-  cron-job.org의 05:30(KST) `repository_dispatch`로 전달된다.
+- 등록된 RSS 피드를 GitHub Actions가 매일 06:00(KST)에 조회하기 시작한다. 시작 요청은
+  cron-job.org의 05:40(KST) `repository_dispatch`로 전달된다.
 - 각 항목에서 제목, 링크, 발행일, 출처, RSS 설명을 추출한다.
 - RSS 응답 실패 시 해당 피드만 실패 처리하고 전체 작업은 계속 진행한다.
 
@@ -213,14 +213,14 @@ KF-21, K2, K9, L-SAM, M-SAM, 유도무기, 무인기, 항공우주
 
 ### 스케줄링
 
-- 운영 스케줄의 단일 기준은 cron-job.org의 매일 05:30 KST 요청이다.
+- 운영 스케줄의 단일 기준은 cron-job.org의 매일 05:40 KST 요청이다.
 - cron-job.org는 `dapa-morning-brief` repository dispatch를 호출하고, Actions는
-  05:45 KST까지 대기한 뒤 수집을 시작한다.
+  06:00 KST까지 대기한 뒤 수집을 시작한다.
 - 준비 명령과 Telegram 발송은 production job당 각각 한 번만 시도한다.
 - 어느 단계든 production job이 실패하면 60초 뒤 replacement 실행을 요청하며, replacement는
   최대 5회로 제한한다.
 - Telegram 발송에 성공한 날짜는 완료 상태로 기록하고 이후 실행에서는 발송하지 않는다.
-- 06:20은 준비 완료 목표로 기록하고, 06:30 이전에 준비되면 해당 시각까지 대기한다.
+- 06:25는 준비 완료 목표로 기록하고, 06:30 이전에 준비되면 해당 시각까지 대기한다.
 - 06:30 이후에 준비되면 즉시 Telegram Bot API를 호출한다.
 - 수동 Actions 실행은 기존 입력에 따라 미리보기 또는 명시적 재발송을 수행한다.
 
@@ -249,9 +249,9 @@ TZ=Asia/Seoul
 ## 13. 시스템 아키텍처
 
 ```text
-cron-job.org(05:30 KST)
+cron-job.org(05:40 KST)
   -> repository_dispatch(dapa-morning-brief)
-  -> Wait Until Collection Target(05:45 KST)
+  -> Wait Until Collection Target(06:00 KST)
   -> RSS Collector
   -> Normalizer
   -> Keyword Filter
@@ -260,7 +260,7 @@ cron-job.org(05:30 KST)
   -> Rule-based Classifier
   -> Telegram Formatter
   -> One Preparation Attempt
-  -> Preparation Target Check(06:20 KST)
+  -> Preparation Target Check(06:25 KST)
   -> Wait Until Send Target When Early(06:30 KST)
   -> One Telegram Send Attempt(immediate when late)
   -> Failed Run Re-dispatch(after 60 seconds)
@@ -340,8 +340,8 @@ on:
   workflow_dispatch:
 ```
 
-cron-job.org의 05:30 요청이 primary trigger다. Actions는 날짜별 발송 캐시를 먼저 확인하고,
-미발송이면 05:45까지 대기한 뒤 준비 CLI와 Telegram API를 각각 한 번씩만 호출한다. 어느
+cron-job.org의 05:40 요청이 primary trigger다. Actions는 날짜별 발송 캐시를 먼저 확인하고,
+미발송이면 06:00까지 대기한 뒤 준비 CLI와 Telegram API를 각각 한 번씩만 호출한다. 어느
 단계든 실패하면 `GITHUB_TOKEN`으로 `dapa-morning-brief-retry` repository dispatch를 60초
 뒤 요청하며 replacement 실행은 최대 5회다. 각 production job은 최대 120분 실행한다.
 
@@ -391,7 +391,7 @@ Windows 작업 스케줄러, Linux cron, Hermes Cronjob에는 별도 운영 발�
 | Telegram 토큰 유출 | `.env`/Secrets 사용, 유출 시 BotFather에서 토큰 재발급 |
 | 비공개 정보 혼입 | 공개 RSS만 입력으로 사용, 내부자료 업로드 금지 |
 | 원문 왜곡 | 선택한 기사의 원문 제목과 URL을 그대로 사용하고 요약·합성·재작성 금지 |
-| 외부 요청·Actions 실패 | cron-job.org가 05:30에 primary dispatch를 요청하고, 시작된 workflow의 실패는 60초 뒤 최대 5회 replacement로 복구하며 06:30 이후에는 즉시 1회 발송 시도 |
+| 외부 요청·Actions 실패 | cron-job.org가 05:40에 primary dispatch를 요청하고, 시작된 workflow의 실패는 60초 뒤 최대 5회 replacement로 복구하며 06:30 이후에는 즉시 1회 발송 시도 |
 
 ## 21. MVP 범위
 

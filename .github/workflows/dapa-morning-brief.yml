@@ -203,8 +203,10 @@ jobs:
         run: |
           now_epoch=$(TZ=Asia/Seoul date +%s)
           target_epoch=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 06:30:00" +%s)
-          if [ "$now_epoch" -lt "$target_epoch" ]; then
+          if [ "$now_epoch" -lt "$target_epoch" ] && [ "$FORCE_DELIVERY" != "true" ]; then
             sleep "$((target_epoch - now_epoch))"
+          elif [ "$FORCE_DELIVERY" = "true" ]; then
+            echo "FORCE_DELIVERY=true; skipping 06:30 KST wait and sending now."
           else
             echo "06:30 KST target was missed; sending immediately."
           fi

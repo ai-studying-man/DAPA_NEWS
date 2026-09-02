@@ -24,6 +24,7 @@ def test_workflow_targets_0620_and_sends_at_or_after_0630() -> None:
     assert wait_step < workflow.index(send_command)
     assert "06:30:00" in workflow
     assert "sending immediately" in workflow
+    assert 'FORCE_DELIVERY=true; skipping 06:30 KST wait and sending now.' in workflow
     assert "Telegram will not be called" not in workflow
     assert "restricted to 06:30" not in workflow
 

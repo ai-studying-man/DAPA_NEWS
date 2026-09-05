@@ -7,6 +7,12 @@ import xml.etree.ElementTree as ET
 from datetime import UTC, datetime, time, timedelta, timezone
 from typing import TYPE_CHECKING
 
+from dapa_morning_brief.article_scope import (
+    article_scope_is_allowed,
+    has_foreign_primary_authority,
+    is_korean_defense_ministry_news,
+    is_us_defense_institution_news,
+)
 from dapa_morning_brief.business_rules import (
     DEFENSE_INDUSTRY_KEYWORDS,
     contains_defense_anchor,
@@ -35,7 +41,6 @@ from dapa_morning_brief.sources import (
     DEFENSE_TECH_KEYWORDS,
     DOMESTIC_WEAPON_PROGRAM_KEYWORDS,
     EXCLUDE_KEYWORDS,
-    FOREIGN_CONTEXT_KEYWORDS,
     GENERIC_WEAPON_KEYWORDS,
     KOREA_ANCHOR_KEYWORDS,
     POLICY_KEYWORDS,
@@ -84,6 +89,7 @@ def parse_rss_items(
         if default_section is Section.GOVERNMENT and not _is_current_government_news(
             metadata_text,
             title,
+            source,
         ):
             continue
         section = default_section or classify_title(
@@ -93,7 +99,7 @@ def parse_rss_items(
         )
         articles.append(
             Article(
-                title=_clean_title(title),
+                title=_clean_title(title, source=source),
                 url=link,
                 published_at=published_at,
                 source=source,
@@ -117,7 +123,7 @@ def classify_title(
     text = f"{title} {description} {source}".casefold()
     if _contains_any(text, EXCLUDE_KEYWORDS):
         section = Section.POLICY
-    elif _is_current_government_news(text, title):
+    elif _is_current_government_news(text, title, source):
         section = Section.GOVERNMENT
     elif is_defense_export_news(text):
         section = Section.EXPORT_BUSINESS
@@ -152,15 +158,11 @@ def is_relevant_article(title: str, description: str, source: str) -> bool:
         return True
     if _contains_any(text, EXCLUDE_KEYWORDS):
         return False
-    defense_export = is_defense_export_news(text)
-    if (
-        _contains_any(text, FOREIGN_CONTEXT_KEYWORDS)
-        and not _contains_any(text, KOREA_ANCHOR_KEYWORDS)
-        and not defense_export
-    ):
+    if not article_scope_is_allowed(text, title, source):
         return False
+    defense_export = is_defense_export_news(text)
     return (
-        _is_current_government_news(text, title)
+        _is_current_government_news(text, title, source)
         or _is_defense_tech_policy_news(text)
         or defense_export
         or _contains_any(text, POLICY_KEYWORDS)
@@ -169,8 +171,14 @@ def is_relevant_article(title: str, description: str, source: str) -> bool:
     )
 
 
-def _is_current_government_news(text: str, title: str) -> bool:
-    if "국방부" in text:
+def _is_current_government_news(text: str, title: str, source: str) -> bool:
+    if has_foreign_primary_authority(title):
+        return False
+    if is_us_defense_institution_news(title):
+        return True
+    if not article_scope_is_allowed(text, title, source):
+        return False
+    if is_korean_defense_ministry_news(title, source):
         return True
     headline_actor = current_government_actor(title)
     named_current_leader = _contains_any(text, CURRENT_GOVERNMENT_LEADER_KEYWORDS)

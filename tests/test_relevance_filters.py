@@ -179,15 +179,26 @@ class RelevanceFilterTest(TestCase):
         assert classify_title(title) is Section.WEAPON_SYSTEM
 
     def test_configured_defense_queries_survive_relevance_filter(self) -> None:
-        expectations = {
-            "한국 해군 차세대 호위함 건조 본격화": Section.WEAPON_SYSTEM,
-            "NATO 품질인증 획득…글로벌 공략 속도": Section.EXPORT_BUSINESS,
-        }
+        # Given
+        title = "한국 해군 차세대 호위함 건조 본격화"
 
-        for title, expected in expectations.items():
-            with self.subTest(title=title):
-                assert is_relevant_title(title) is True
-                assert classify_title(title) is expected
+        # When
+        result = is_relevant_title(title), classify_title(title)
+
+        # Then
+        assert result == (True, Section.WEAPON_SYSTEM)
+
+    def test_ambiguous_foreign_defense_query_is_rejected_without_korean_context(
+        self,
+    ) -> None:
+        # Given
+        title = "NATO 품질인증 획득…글로벌 공략 속도"
+
+        # When
+        result = is_relevant_title(title)
+
+        # Then
+        assert result is False
 
     def test_generic_government_decree_without_defense_context_is_rejected(
         self,

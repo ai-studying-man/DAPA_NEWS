@@ -6,7 +6,7 @@ import email.utils
 import html
 import re
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
     import xml.etree.ElementTree as ET
@@ -19,6 +19,17 @@ __all__ = [
     "_text",
     "_view_count_from_item",
 ]
+
+DOMAIN_PATTERN: Final[str] = r"(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}"
+DOMAIN_SUFFIX_PATTERN: Final[re.Pattern[str]] = re.compile(
+    "".join(
+        (
+            r"\s*(?:[-|·:\uFF1A]\s*|\[\s*)(?:https?://)?(?:www\.)?",
+            rf"{DOMAIN_PATTERN}(?::\d+)?(?:[/#?][^\s\]]*)?\s*\]?\s*$",
+        ),
+    ),
+    flags=re.IGNORECASE,
+)
 
 
 def _text(item: ET.Element, name: str) -> str:
@@ -44,14 +55,24 @@ def _parse_date(raw: str) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
-def _clean_title(title: str) -> str:
+def _clean_title(title: str, *, source: str = "") -> str:
     cleaned = re.sub(r"\s+", " ", html.unescape(title)).strip()
-    return re.sub(
-        r"\s*(?:[-|·]\s*)?\[?\s*(?:v\.daum\.net|(?:www\.)?newfilenews\.com)\s*\]?\s*$",
-        "",
-        cleaned,
-        flags=re.IGNORECASE,
-    ).rstrip()
+    normalized_source = re.sub(r"\s+", " ", html.unescape(source)).strip()
+    source_suffix_pattern = (
+        re.compile(
+            rf"\s*(?:[-|·:\uFF1A]\s*|\[\s*){re.escape(normalized_source)}\s*\]?\s*$",
+            flags=re.IGNORECASE,
+        )
+        if normalized_source
+        else None
+    )
+    previous = ""
+    while cleaned != previous:
+        previous = cleaned
+        if source_suffix_pattern is not None:
+            cleaned = source_suffix_pattern.sub("", cleaned).rstrip()
+        cleaned = DOMAIN_SUFFIX_PATTERN.sub("", cleaned).rstrip()
+    return cleaned
 
 
 def _clean_description(description: str) -> str:

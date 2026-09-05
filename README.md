@@ -36,9 +36,9 @@ TELEGRAM_CHAT_ID=6015255978,-1004402722342
 - 정책브리핑 및 국방부 RSS는 사용하지 않습니다.
 - 최근 1일 기사를 기본 대상으로 하며, 부족하면 2일까지 확장할 수 있습니다.
 - 섹션별 최대 5건을 선정하되, 동일 사건의 유사 기사는 언론사가 달라도 1건만 남깁니다.
-- cron-job.org가 매일 05:30 KST에 `dapa-morning-brief` repository dispatch를
-  요청합니다. Actions가 05:45 전에 시작되면 그 시각까지 대기한 뒤 기사를 수집하고,
-  06:20을 목표로 최종 Telegram 메시지를 JSON으로 준비합니다.
+- cron-job.org가 매일 05:40 KST에 `dapa-morning-brief` repository dispatch를
+  요청합니다. Actions가 06:00 전에 시작되면 그 시각까지 대기한 뒤 기사를 수집하고,
+  06:25를 목표로 최종 Telegram 메시지를 JSON으로 준비합니다.
 - 준비가 끝난 Actions는 06:30 KST까지 유지된 뒤 Telegram을 한 번 발송합니다. 06:30
   이후 준비가 끝나면 즉시 발송하며, 실패한 실행은 제한된 횟수만 replacement 실행으로
   복구합니다.

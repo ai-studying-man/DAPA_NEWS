@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from dapa_morning_brief.rss_parser import parse_rss_items
 
 
-def test_parse_rss_items_uses_upcoming_send_window_during_0545_collection() -> None:
+def test_parse_rss_items_uses_upcoming_send_window_during_0600_collection() -> None:
     # Given
     xml = """
     <rss>

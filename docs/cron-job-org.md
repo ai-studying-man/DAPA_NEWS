@@ -1,7 +1,7 @@
 # cron-job.org 운영 설정
 
 이 프로젝트의 주 스케줄러는 GitHub Actions `schedule`이 아니라 cron-job.org입니다.
-Windows PC나 로컬 watchdog이 꺼져 있어도 cron-job.org가 GitHub REST API를 호출해
+Windows PC가 꺼져 있어도 cron-job.org가 GitHub REST API를 호출해
 workflow를 시작합니다.
 
 ## Schedule
@@ -61,6 +61,5 @@ dispatch endpoint는 fine-grained PAT의 대상 저장소에 `Contents: write` �
 3. 실행 로그에 `Trigger: repository_dispatch / dapa-morning-brief`가 표시되는지 확인합니다.
 4. 이미 당일 발송 cache가 있으면 뉴스 수집과 Telegram 발송이 건너뛰어질 수 있습니다.
 
-GitHub Actions의 `workflow_dispatch`와 `dapa-morning-brief-watchdog` 이벤트는 기존
-수동·비상용 호환 경로로 유지합니다. 일상 운영에는 cron-job.org의
-`dapa-morning-brief`만 사용합니다.
+GitHub Actions의 `workflow_dispatch`는 수동 실행용으로 유지합니다. 일상 운영에는
+cron-job.org의 `dapa-morning-brief`만 사용합니다.

@@ -61,8 +61,8 @@ Telegram 발송에 성공한 날짜는 완료 캐시에 기록하므로 이후 �
 건너뜁니다.
 
 사용자가 실행하는 `workflow_dispatch`는 기존 입력에 따라 preview 또는 명시적 resend를
-수행합니다. `dapa-morning-brief`와 `dapa-morning-brief-watchdog` repository dispatch는
-production `scheduled-brief`로 연결되고, `dapa-morning-brief-retry`는 자동 복구용입니다.
+수행합니다. `dapa-morning-brief` repository dispatch는 production `scheduled-brief`로
+연결되고, `dapa-morning-brief-retry`는 자동 복구용입니다.
 
 과천시·대전시 당일 날씨는 Open-Meteo Forecast API의 KMA Seamless 모델을 우선
 사용합니다. KMA 모델 값이 비어 있으면 KMA 단기예보 API 프록시에서 당일 시간별
@@ -84,20 +84,10 @@ TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID
 ```
 
-## Windows watchdog (비상용)
+## 운영 환경
 
-운영 발송은 cron-job.org가 담당하므로 Windows PC가 켜져 있거나 watchdog 프로그램이
-실행 중일 필요가 없습니다. 기존 `dapa-morning-brief-watchdog` 이벤트와 PowerShell
-스크립트는 비상용 호환 경로로 남겨두지만, cron-job.org가 안정적으로 확인되면 작업
-스케줄러 등록 작업은 비활성화하는 것을 권장합니다. 기존 작업은 삭제하지 않아야
-필요할 때 다시 활성화할 수 있습니다.
-
-```powershell
-Disable-ScheduledTask -TaskName "DAPA Morning Brief Watchdog"
-```
-
-복구가 필요하면 `Enable-ScheduledTask`를 사용합니다. Linux cron과 Hermes Cronjob은
-운영 발송에 사용하지 않습니다.
+운영 발송은 cron-job.org의 `dapa-morning-brief` 요청만 사용하며 Windows PC의 전원
+상태와 무관합니다. Linux cron과 Hermes Cronjob도 운영 발송에 사용하지 않습니다.
 
 ## 수집 우선순위
 

@@ -336,7 +336,7 @@ bot.send_message(
 ```yaml
 on:
   repository_dispatch:
-    types: [dapa-morning-brief, dapa-morning-brief-retry, dapa-morning-brief-watchdog]
+    types: [dapa-morning-brief, dapa-morning-brief-retry]
   workflow_dispatch:
 ```
 

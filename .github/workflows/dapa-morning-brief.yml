@@ -5,7 +5,6 @@ on:
     types:
       - dapa-morning-brief
       - dapa-morning-brief-retry
-      - dapa-morning-brief-watchdog
   workflow_dispatch:
     inputs:
       resend:
@@ -96,8 +95,7 @@ jobs:
     if: >-
       (github.event_name == 'repository_dispatch' &&
       (github.event.action == 'dapa-morning-brief' ||
-      github.event.action == 'dapa-morning-brief-retry' ||
-      github.event.action == 'dapa-morning-brief-watchdog')) ||
+      github.event.action == 'dapa-morning-brief-retry')) ||
       (github.event_name == 'workflow_dispatch' && inputs.resend)
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -235,8 +233,7 @@ jobs:
       needs.scheduled-brief.result == 'failure' &&
       ((github.event_name == 'repository_dispatch' &&
       (github.event.action == 'dapa-morning-brief' ||
-      github.event.action == 'dapa-morning-brief-retry' ||
-      github.event.action == 'dapa-morning-brief-watchdog')) ||
+      github.event.action == 'dapa-morning-brief-retry')) ||
       (github.event_name == 'workflow_dispatch' && inputs.resend))
     runs-on: ubuntu-latest
     timeout-minutes: 15

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
 from datetime import date, datetime
@@ -13,10 +14,14 @@ from typing import TYPE_CHECKING, Final
 from zoneinfo import ZoneInfo
 
 from dapa_morning_brief.article_content import (
-    _filter_articles_by_publisher_date,
     fetch_article_bodies,
 )
+from dapa_morning_brief.article_history import ArticleHistory
 from dapa_morning_brief.briefing import build_briefing, format_telegram_message
+from dapa_morning_brief.candidate_validation import (
+    BODY_DEDUP_CANDIDATE_MULTIPLIER,
+    validated_candidates,
+)
 from dapa_morning_brief.collector import collect_articles
 from dapa_morning_brief.copilot_summary import summarize_article_bodies
 from dapa_morning_brief.models import PRACTICE_POINT_SECTIONS, Section
@@ -29,9 +34,7 @@ from dapa_morning_brief.telegram import (
 from dapa_morning_brief.weather import collect_weather_forecasts
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
-
-    from dapa_morning_brief.models import Article
+    from collections.abc import Sequence
 
 DEFAULT_DAYS: Final = 1
 DEFAULT_FALLBACK_DAYS: Final = 2
@@ -39,12 +42,10 @@ KST: Final[ZoneInfo] = ZoneInfo("Asia/Seoul")
 COPILOT_SUMMARY_TEMPLATE: Final = (
     "Copilot summary: generated={generated} fallback={fallback} bodies={bodies}\n"
 )
-FRESHNESS_SUMMARY_TEMPLATE: Final = (
-    "Publisher freshness ({days}d): checked={checked} accepted={accepted} "
-    "stale={stale} unverifiable={unverifiable}\n"
-)
 PREPARED_BRIEF_TEMPLATE: Final = "Prepared brief saved: {path}\n"
-BODY_DEDUP_CANDIDATE_MULTIPLIER: Final = 3
+SELECTED_TEMPLATE: Final = (
+    "Selected: section={section} count={count} below_minimum={below}\n"
+)
 
 
 class BriefNamespace(argparse.Namespace):
@@ -65,6 +66,7 @@ class BriefNamespace(argparse.Namespace):
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the DAPA morning brief job."""
     _configure_stdio()
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
     args = BriefNamespace()
     _ = _parser().parse_args(argv, namespace=args)
     today = datetime.now(KST).date()
@@ -94,6 +96,9 @@ def _prepare_brief(
     today: date,
     generate_practice_points: bool,
 ) -> PreparedBrief:
+    raw_path = os.getenv("DAPA_HISTORY_PATH")
+    history_path = Path(raw_path) if raw_path else None
+    history = ArticleHistory.load(history_path) if history_path else ArticleHistory()
     days = args.days
     max_per_section = args.max_per_section
     articles = collect_articles(
@@ -102,33 +107,14 @@ def _prepare_brief(
         only_google=args.google_only,
     )
     articles = list(
-        _validated_candidates(
-            articles,
+        validated_candidates(
+            history.exclude_recent(articles, today=today),
             today=today,
             max_age_days=days,
             max_per_section=max_per_section,
         ),
     )
-    missing_sections = set(Section).difference(article.section for article in articles)
-    if missing_sections and args.fallback_days > days:
-        fallback_articles = collect_articles(
-            days=args.fallback_days,
-            include_google=True,
-            only_google=False,
-        )
-        articles.extend(
-            _validated_candidates(
-                (
-                    article
-                    for article in fallback_articles
-                    if article.section in missing_sections
-                ),
-                today=today,
-                max_age_days=args.fallback_days,
-                max_per_section=max_per_section,
-            ),
-        )
-
+    collected_articles = tuple(articles)
     candidate_briefing = build_briefing(
         articles,
         max_per_section=max_per_section * BODY_DEDUP_CANDIDATE_MULTIPLIER,
@@ -138,7 +124,9 @@ def _prepare_brief(
     )
     article_bodies = ()
     if generate_practice_points:
-        article_bodies = fetch_article_bodies(candidate_briefing)
+        article_bodies = fetch_article_bodies(
+            candidate_briefing, include_government=True
+        )
         briefing = build_briefing(
             candidate_articles,
             max_per_section=max_per_section,
@@ -146,6 +134,55 @@ def _prepare_brief(
         )
     else:
         briefing = build_briefing(candidate_articles, max_per_section=max_per_section)
+    missing_sections = {
+        section
+        for section in Section
+        if len(briefing.sections[section]) < min(3, max_per_section)
+    }
+    if missing_sections and args.fallback_days > days:
+        fallback_articles = collect_articles(
+            days=args.fallback_days,
+            include_google=True,
+            only_google=False,
+        )
+        validated_fallback = validated_candidates(
+            (
+                article
+                for article in history.exclude_recent(fallback_articles, today=today)
+                if article.section in missing_sections
+            ),
+            today=today,
+            max_age_days=args.fallback_days,
+            max_per_section=max_per_section,
+        )
+        collected_articles += validated_fallback
+        articles.extend(validated_fallback)
+        candidate_briefing = build_briefing(
+            articles,
+            max_per_section=max_per_section * BODY_DEDUP_CANDIDATE_MULTIPLIER,
+            article_bodies=article_bodies,
+        )
+        if generate_practice_points:
+            article_bodies = fetch_article_bodies(
+                candidate_briefing, include_government=True
+            )
+        briefing = build_briefing(
+            tuple(chain.from_iterable(candidate_briefing.sections.values())),
+            max_per_section=max_per_section,
+            article_bodies=article_bodies,
+        )
+    for section in Section:
+        count = len(briefing.sections[section])
+        _ = sys.stderr.write(
+            SELECTED_TEMPLATE.format(
+                section=section.value,
+                count=count,
+                below=count < min(3, max_per_section),
+            ),
+        )
+    if not any(briefing.sections.values()) and not args.dry_run:
+        message = "No validated news remains; refusing an empty Telegram brief."
+        raise RuntimeError(message)
     weather_forecasts = collect_weather_forecasts(as_of=today)
     practice_points = ()
     selected_count = sum(
@@ -174,7 +211,7 @@ def _prepare_brief(
         practice_points=practice_points,
         weather_forecasts=weather_forecasts,
     )
-    return PreparedBrief(
+    prepared = PreparedBrief(
         briefing_date=today,
         message=message,
         generated_practice_points=len(practice_points),
@@ -182,51 +219,9 @@ def _prepare_brief(
             selected_count - len(practice_points) if generate_practice_points else 0
         ),
     )
-
-
-def _validated_candidates(
-    articles: Iterable[Article],
-    *,
-    today: date,
-    max_age_days: int,
-    max_per_section: int,
-) -> tuple[Article, ...]:
-    candidate_briefing = build_briefing(
-        articles,
-        max_per_section=max_per_section * BODY_DEDUP_CANDIDATE_MULTIPLIER,
-    )
-    candidates = tuple(chain.from_iterable(candidate_briefing.sections.values()))
-    freshness = _filter_articles_by_publisher_date(
-        candidates,
-        as_of=today,
-        max_age_days=max_age_days,
-    )
-    if freshness.checked_google:
-        accepted = (
-            freshness.checked_google
-            - len(freshness.rejected)
-            - freshness.unverifiable
-        )
-        _ = sys.stderr.write(
-            FRESHNESS_SUMMARY_TEMPLATE.format(
-                days=max_age_days,
-                checked=freshness.checked_google,
-                accepted=accepted,
-                stale=len(freshness.rejected),
-                unverifiable=freshness.unverifiable,
-            ),
-        )
-        for rejection in freshness.rejected:
-            _ = sys.stderr.write(
-                "Freshness excluded: "
-                f"publisher_date={rejection.publisher_date.isoformat()} "
-                f"title={rejection.title}\n",
-            )
-        for title in freshness.unverified_titles:
-            _ = sys.stderr.write(
-                f"Freshness excluded: publisher_date=unverifiable title={title}\n",
-            )
-    return freshness.articles
+    if history_path is not None and not args.dry_run:
+        history.record(collected_articles, today=today).save(history_path)
+    return prepared
 
 
 def _send_prepared(args: BriefNamespace, *, today: date, path: Path) -> int:

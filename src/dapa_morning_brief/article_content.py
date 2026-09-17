@@ -44,14 +44,17 @@ class _FreshnessRejection:
 
 
 @dataclass(frozen=True, slots=True)
-class _PublisherDateFilterResult:
+class PublisherDateFilterResult:
+    """Verified search candidates and their exclusion reasons."""
+
     articles: tuple[Article, ...]
-    checked_google: int
+    checked_search: int
     rejected: tuple[_FreshnessRejection, ...]
     unverified_titles: tuple[str, ...]
 
     @property
     def unverifiable(self) -> int:
+        """Count candidates whose original date could not be verified."""
         return len(self.unverified_titles)
 
 
@@ -91,25 +94,27 @@ def resolve_article_url(article_url: str) -> str:
     return article_url
 
 
-def _filter_articles_by_publisher_date(
+def filter_articles_by_publisher_date(
     articles: Iterable[Article],
     *,
     as_of: date,
     max_age_days: int,
-) -> _PublisherDateFilterResult:
+) -> PublisherDateFilterResult:
+    """Verify publisher dates for Google and Naver search results."""
     if max_age_days < 1:
         msg = "max_age_days must be at least 1"
         raise ValueError(msg)
     all_articles = tuple(articles)
-    google_articles = tuple(
+    search_articles = tuple(
         article
         for article in all_articles
-        if article.url.startswith("https://news.google.com/")
+        if article.search_provider == "naver"
+        or article.url.startswith("https://news.google.com/")
     )
-    if not google_articles:
-        return _PublisherDateFilterResult(
+    if not search_articles:
+        return PublisherDateFilterResult(
             articles=all_articles,
-            checked_google=0,
+            checked_search=0,
             rejected=(),
             unverified_titles=(),
         )
@@ -123,18 +128,18 @@ def _filter_articles_by_publisher_date(
             headers=headers,
         ) as client,
         ThreadPoolExecutor(
-            max_workers=min(MAX_FETCH_WORKERS, len(google_articles)),
+            max_workers=min(MAX_FETCH_WORKERS, len(search_articles)),
         ) as executor,
     ):
         inspections = tuple(
             executor.map(
                 partial(_inspect_publisher_date, client),
-                google_articles,
+                search_articles,
             ),
         )
 
     cutoff_date = as_of - timedelta(days=max_age_days)
-    accepted_google: set[Article] = set()
+    accepted_search: set[Article] = set()
     rejected: list[_FreshnessRejection] = []
     unverified_titles: list[str] = []
     for inspection in inspections:
@@ -142,7 +147,7 @@ def _filter_articles_by_publisher_date(
         if publisher_date is None:
             unverified_titles.append(inspection.article.title)
         elif cutoff_date <= publisher_date <= as_of:
-            accepted_google.add(inspection.article)
+            accepted_search.add(inspection.article)
         else:
             rejected.append(
                 _FreshnessRejection(
@@ -152,14 +157,13 @@ def _filter_articles_by_publisher_date(
                 ),
             )
 
-    return _PublisherDateFilterResult(
+    return PublisherDateFilterResult(
         articles=tuple(
             article
             for article in all_articles
-            if not article.url.startswith("https://news.google.com/")
-            or article in accepted_google
+            if article not in search_articles or article in accepted_search
         ),
-        checked_google=len(google_articles),
+        checked_search=len(search_articles),
         rejected=tuple(rejected),
         unverified_titles=tuple(unverified_titles),
     )
@@ -178,7 +182,7 @@ def _inspect_publisher_date(
     except httpx.HTTPError:
         return _PublisherDateInspection(article=article, publisher_date=None)
     metadata = trafilatura.extract_metadata(response.text)
-    raw_date = metadata.date if metadata is not None else None
+    raw_date = metadata.date
     return _PublisherDateInspection(
         article=article,
         publisher_date=_parse_publisher_date(raw_date),
@@ -197,14 +201,18 @@ def _parse_publisher_date(raw_date: str | None) -> date | None:
         return None
 
 
-def fetch_article_bodies(briefing: Briefing) -> tuple[ArticleBody, ...]:
+def fetch_article_bodies(
+    briefing: Briefing,
+    *,
+    include_government: bool = False,
+) -> tuple[ArticleBody, ...]:
     """Fetch article bodies concurrently while preserving briefing order."""
     timeout = httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0)
     headers = {"User-Agent": os.getenv("DAPA_BRIEF_USER_AGENT", USER_AGENT)}
     articles = tuple(
         article
         for section, section_articles in briefing.sections.items()
-        if section in PRACTICE_POINT_SECTIONS
+        if include_government or section in PRACTICE_POINT_SECTIONS
         for article in section_articles
     )
     if not articles:

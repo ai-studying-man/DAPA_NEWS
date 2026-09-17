@@ -44,6 +44,7 @@ def build_briefing(
     buckets: dict[Section, list[Article]] = {section: [] for section in SECTION_ORDER}
     selected_articles: list[Article] = []
     body_by_url = {body.article_url: body.body for body in article_bodies}
+    articles = tuple(articles)
 
     for section in SECTION_ORDER:
         candidates = sorted(
@@ -84,18 +85,18 @@ def _source_rank(source: str) -> int:
     return len(SOURCE_PRIORITY)
 
 
-def _article_rank(article: Article) -> tuple[int, int, int, int, int, float]:
+def _article_rank(article: Article) -> tuple[float, int, int, int, int, int]:
     view_count_known = 0 if article.view_count is not None else 1
     view_count_rank = -(article.view_count if article.view_count is not None else 0)
     feed_rank_known = 0 if article.feed_rank is not None else 1
     feed_rank = article.feed_rank if article.feed_rank is not None else 0
     return (
+        -article.published_at.timestamp(),
         view_count_known,
         view_count_rank,
         feed_rank_known,
         feed_rank,
         _source_rank(article.source),
-        -article.published_at.timestamp(),
     )
 
 
@@ -124,6 +125,8 @@ def _reserve_agency_article(
         ):
             continue
         replaced = section_articles[-1]
+        if candidate.published_at < replaced.published_at:
+            continue
         if replaced.view_count is not None and (
             candidate.view_count is None or candidate.view_count < replaced.view_count
         ):

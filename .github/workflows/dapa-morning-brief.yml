@@ -105,7 +105,10 @@ jobs:
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
+      NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
       KSKILL_PROXY_BASE_URL: https://k-skill-proxy.nomadamas.org
+      DAPA_HISTORY_PATH: .dapa-history/articles.json
       FORCE_DELIVERY: >-
         ${{ (github.event_name == 'workflow_dispatch' && inputs.resend) ||
         github.event.client_payload.force_send == true }}
@@ -163,7 +166,15 @@ jobs:
           env.FORCE_DELIVERY == 'true'
         continue-on-error: true
         run: npm install -g @github/copilot
+      - name: Restore recent article history
+        uses: actions/cache/restore@v4
+        with:
+          path: .dapa-history
+          key: dapa-article-history-v1-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            dapa-article-history-v1-${{ github.ref_name }}-
       - name: Prepare complete morning brief
+        id: prepare
         if: >-
           steps.sent-cache.outputs.cache-hit != 'true' ||
           env.FORCE_DELIVERY == 'true'
@@ -185,6 +196,12 @@ jobs:
             echo "Preparation completed: $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M:%S %Z')"
             echo "WARNING: Preparation completed after the 06:25 KST target; delivery will continue."
           fi
+      - name: Save recent article history
+        if: steps.prepare.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: .dapa-history
+          key: dapa-article-history-v1-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Upload prepared brief diagnostics
         if: >-
           steps.sent-cache.outputs.cache-hit != 'true' ||
@@ -347,6 +364,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
+      NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
       KSKILL_PROXY_BASE_URL: https://k-skill-proxy.nomadamas.org
       GITHUB_TOKEN: ${{ github.token }}
     steps:

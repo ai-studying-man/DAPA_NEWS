@@ -11,3 +11,7 @@ venv/
 logs/
 *.log
 secrets.*
+
+.dapa-history/
+.dapa-preview/
+.dapa-prepared/

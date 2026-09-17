@@ -173,8 +173,8 @@ class CliTest(TestCase):
         assert exit_code == 0
         assert generated.text in send.call_args.kwargs["text"]
         assert (
-            diagnostic_output.getvalue()
-            == "Copilot summary: generated=1 fallback=0 bodies=1\n"
+            "Copilot summary: generated=1 fallback=0 bodies=1\n"
+            in diagnostic_output.getvalue()
         )
 
     def test_cli_omits_press_releases_from_dry_run(self) -> None:

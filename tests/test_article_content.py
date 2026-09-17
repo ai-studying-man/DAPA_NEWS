@@ -4,11 +4,12 @@ from datetime import UTC, date, datetime
 from unittest.mock import patch
 
 import httpx
+import pytest
 
 from dapa_morning_brief.article_content import (
-    _filter_articles_by_publisher_date,
     extract_main_text,
     fetch_article_bodies,
+    filter_articles_by_publisher_date,
     resolve_article_url,
 )
 from dapa_morning_brief.models import Article, Briefing, Section
@@ -54,7 +55,11 @@ def test_resolve_article_url_decodes_google_news_link() -> None:
     assert resolved == publisher_url
 
 
-def test_fetch_article_bodies_skips_sections_without_practice_points() -> None:
+@pytest.mark.parametrize("include_government", [False, True])
+def test_fetch_article_bodies_can_include_government_for_deduplication(
+    *,
+    include_government: bool,
+) -> None:
     # Given
     published = datetime(2026, 8, 6, tzinfo=UTC)
     government = Article(
@@ -93,11 +98,12 @@ def test_fetch_article_bodies_skips_sections_without_practice_points() -> None:
             return_value="방위사업 조달 정책의 적용 일정을 확정했다.",
         ),
     ):
-        bodies = fetch_article_bodies(briefing)
+        bodies = fetch_article_bodies(briefing, include_government=include_government)
 
     # Then
-    assert [body.article_url for body in bodies] == [policy.url]
-    assert get.call_count == 1
+    expected = [government.url, policy.url] if include_government else [policy.url]
+    assert [body.article_url for body in bodies] == expected
+    assert get.call_count == len(expected)
 
 
 def test_publisher_date_filter_rejects_resurfaced_old_google_article() -> None:
@@ -126,7 +132,7 @@ def test_publisher_date_filter_rejects_resurfaced_old_google_article() -> None:
         ),
         patch.object(httpx.Client, "get", return_value=response),
     ):
-        result = _filter_articles_by_publisher_date(
+        result = filter_articles_by_publisher_date(
             [article],
             as_of=date(2026, 8, 30),
             max_age_days=2,
@@ -134,15 +140,14 @@ def test_publisher_date_filter_rejects_resurfaced_old_google_article() -> None:
 
     # Then
     assert result.articles == ()
-    assert result.checked_google == 1
+    assert result.checked_search == 1
     assert result.unverifiable == 0
     assert [(item.title, item.publisher_date) for item in result.rejected] == [
         (article.title, date(2021, 10, 22)),
     ]
 
 
-def test_publisher_date_filter_keeps_current_and_excludes_unverifiable(
-) -> None:
+def test_publisher_date_filter_keeps_current_and_excludes_unverifiable() -> None:
     # Given
     current = Article(
         title="방위사업청, 최신 조달지침 발표",
@@ -168,7 +173,9 @@ def test_publisher_date_filter_keeps_current_and_excludes_unverifiable(
     )
 
     def resolve(url: str) -> str:
-        return url.replace("https://news.google.com/rss/articles/", "https://publisher.example/")
+        return url.replace(
+            "https://news.google.com/rss/articles/", "https://publisher.example/"
+        )
 
     def get(url: str) -> httpx.Response:
         if url.endswith("current"):
@@ -184,7 +191,7 @@ def test_publisher_date_filter_keeps_current_and_excludes_unverifiable(
         ),
         patch.object(httpx.Client, "get", side_effect=get),
     ):
-        result = _filter_articles_by_publisher_date(
+        result = filter_articles_by_publisher_date(
             [current, unavailable],
             as_of=date(2026, 8, 30),
             max_age_days=2,
@@ -192,6 +199,34 @@ def test_publisher_date_filter_keeps_current_and_excludes_unverifiable(
 
     # Then
     assert result.articles == (current,)
-    assert result.checked_google == 2
+    assert result.checked_search == 2
     assert result.rejected == ()
     assert result.unverifiable == 1
+
+
+def test_naver_ingestion_date_does_not_make_old_original_current() -> None:
+    article = Article(
+        title="방사청 획득 계획",
+        url="https://publisher.example/old",
+        published_at=datetime(2026, 9, 17, tzinfo=UTC),
+        source="publisher.example",
+        section=Section.POLICY,
+        search_provider="naver",
+    )
+    response = httpx.Response(
+        200,
+        text=(
+            '<html><head><meta property="article:published_time" '
+            'content="2021-01-01T09:00:00+09:00"></head></html>'
+        ),
+        request=httpx.Request("GET", article.url),
+    )
+    with patch.object(httpx.Client, "get", return_value=response):
+        result = filter_articles_by_publisher_date(
+            [article],
+            as_of=date(2026, 9, 17),
+            max_age_days=2,
+        )
+    assert result.articles == ()
+    assert result.checked_search == 1
+    assert result.rejected[0].publisher_date == date(2021, 1, 1)

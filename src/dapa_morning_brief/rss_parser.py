@@ -19,12 +19,12 @@ from dapa_morning_brief.business_rules import (
     contains_defense_anchor,
     is_defense_business_news,
     is_defense_export_news,
+    is_foreign_procurement_news,
 )
 from dapa_morning_brief.entity_catalog import contains_any as _contains_any
 from dapa_morning_brief.government_rules import (
     CURRENT_DEFENSE_LEADER_KEYWORDS,
     CURRENT_GOVERNMENT_LEADER_KEYWORDS,
-    CURRENT_GOVERNMENT_NARRATIVE_KEYWORDS,
     CURRENT_GOVERNMENT_POLICY_KEYWORDS,
     GENERAL_GOVERNMENT_POLICY_KEYWORDS,
     current_government_actor,
@@ -126,7 +126,7 @@ def classify_title(
         section = Section.POLICY
     elif _is_current_government_news(text, title, source):
         section = Section.GOVERNMENT
-    elif is_defense_export_news(text):
+    elif is_defense_export_news(text) or is_foreign_procurement_news(title, text):
         section = Section.EXPORT_BUSINESS
     elif _is_weapon_development_title(title, source=source):
         section = Section.WEAPON_SYSTEM
@@ -173,7 +173,9 @@ def is_relevant_article(title: str, description: str, source: str) -> bool:
         return False
     if not article_scope_is_allowed(text, title, source):
         return False
-    defense_export = is_defense_export_news(text)
+    defense_export = is_defense_export_news(text) or is_foreign_procurement_news(
+        title, text
+    )
     return (
         _is_current_government_news(text, title, source)
         or _is_defense_tech_policy_news(text)
@@ -189,22 +191,23 @@ def _is_current_government_news(text: str, title: str, source: str) -> bool:
         return False
     if not article_scope_is_allowed(text, title, source):
         return False
-    if is_us_defense_institution_news(title) or _is_defense_leadership_appointment(
-        title
-    ):
+    alliance_news = is_us_defense_institution_news(title) and _contains_any(
+        title,
+        ("한미동맹", "주한미군", "한미 연합"),
+    )
+    if alliance_news or _is_defense_leadership_appointment(title):
         return True
     official_personnel_news = _contains_any(
         source, KOREAN_OFFICIAL_SOURCE_KEYWORDS
     ) and _contains_any(
-        text,
+        title,
         ("장병", "복무여건", "병영", "국방정책", "국방예산", "서울안보대화"),
     )
     if is_korean_defense_ministry_news(title, source) or official_personnel_news:
         return True
     headline_actor = current_government_actor(title)
-    named_current_leader = _contains_any(text, CURRENT_GOVERNMENT_LEADER_KEYWORDS)
-    narrative_actor = _contains_any(text, CURRENT_GOVERNMENT_NARRATIVE_KEYWORDS)
-    if headline_actor is None and not named_current_leader and not narrative_actor:
+    named_current_leader = _contains_any(title, CURRENT_GOVERNMENT_LEADER_KEYWORDS)
+    if headline_actor is None and not named_current_leader:
         return False
     defense_context = (
         _contains_any(text, POLICY_KEYWORDS)
@@ -228,7 +231,6 @@ def _is_current_government_news(text: str, title: str, source: str) -> bool:
             named_current_leader
             and _contains_any(text, CURRENT_GOVERNMENT_POLICY_KEYWORDS)
         )
-        or (narrative_actor and defense_context)
         or defense_leader_context
         or generic_presidential_context
         or generic_government_context
@@ -378,16 +380,28 @@ def _is_public_procurement_headline(title: str) -> bool:
 
 def _has_unrelated_headline(title: str, description: str) -> bool:
     financing = _contains_any(
-        title, ("증권신고서", "기업공개", "IPO", "공모주", "상장 절차")
+        title,
+        (
+            "증권신고서",
+            "기업공개",
+            "IPO",
+            "공모주",
+            "상장 절차",
+            "목표가",
+            "목표주가",
+            "주가",
+            "주식",
+        ),
     )
     profile = title.strip().casefold().startswith(("[who is", "[인물탐구", "[인물소개"))
-    if (financing or profile) and not _has_acquisition_fact(title):
+    stock_movement = re.search(r"방산\s*주|%\s*[↑↓]|급등|급락|상한가|하한가", title)
+    if (financing or profile or stock_movement) and not _has_acquisition_fact(title):
         return True
     incidental_agency = _contains_any(
-        description, AGENCY_KEYWORDS
+        description, (*AGENCY_KEYWORDS, "국방부")
     ) and not _contains_any(
         title,
-        AGENCY_KEYWORDS,
+        (*AGENCY_KEYWORDS, "국방부"),
     )
     headline_context = (
         _contains_any(title, ("국방", "방산", "방위", "획득", "군용", "장병", "병영"))

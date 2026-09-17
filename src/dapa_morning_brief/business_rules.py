@@ -137,7 +137,13 @@ def is_defense_export_news(text: str) -> bool:
         bool(matching_weapons(text))
         or _contains_any(text, DEFENSE_EXPORT_PROGRAM_KEYWORDS)
     ) and _has_export_direction(text)
-    return industry_event or company_export or program_export
+    foreign_partnership = (
+        _contains_any(text, DEFENSE_COMPANY_KEYWORDS)
+        and _contains_any(text, FOREIGN_MARKET_KEYWORDS)
+        and _contains_any(text, ("합작법인", "전략적 협력", "통합대공망", "현지 생산"))
+        and is_defense_business_news(text)
+    )
+    return industry_event or company_export or program_export or foreign_partnership
 
 
 def is_defense_business_news(text: str) -> bool:
@@ -161,3 +167,19 @@ def _has_export_direction(text: str) -> bool:
         _contains_any(text, EXPORT_TRANSACTION_KEYWORDS)
         and _contains_any(text, FOREIGN_MARKET_KEYWORDS)
     )
+
+
+def is_foreign_procurement_news(title: str, text: str) -> bool:
+    """Classify a foreign military considering Korean supply as export coverage."""
+    markets = "|".join(re.escape(country) for country in FOREIGN_MARKET_KEYWORDS)
+    purchaser = re.search(
+        rf"(?:{markets})\s*(?:육군|해군|공군|국방부).*?(?:도입|인수|구매)",
+        title,
+        re.IGNORECASE,
+    )
+    korean_supply = (
+        bool(matching_weapons(text))
+        or _contains_any(text, DEFENSE_COMPANY_KEYWORDS)
+        or _contains_any(text, ("한국 방산", "한국의 함정", "한국 함정", "K-방산"))
+    )
+    return bool(purchaser) and korean_supply

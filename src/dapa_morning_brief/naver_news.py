@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import replace
 from typing import TYPE_CHECKING, Final
@@ -29,11 +30,13 @@ def parse_naver_items(xml_text: str, *, days: int, now: datetime) -> list[Articl
         original = _text(item, "originallink") or _text(item, "link")
         if link is not None:
             link.text = original
-        title = item.find("title")
-        if title is not None:
-            title.text = _clean_description("".join(title.itertext()))
-            for child in list(title):
-                title.remove(child)
+        for field in ("title", "description"):
+            element = item.find(field)
+            if element is not None:
+                text = re.sub(r"</?b\b[^>]*>", "", "".join(element.itertext()))
+                element.text = _clean_description(text)
+                for child in list(element):
+                    element.remove(child)
         ET.SubElement(item, "source").text = urlsplit(original).hostname or "Naver News"
     articles = parse_rss_items(
         ET.tostring(root, encoding="unicode"),

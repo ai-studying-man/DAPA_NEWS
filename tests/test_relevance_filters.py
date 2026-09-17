@@ -87,7 +87,7 @@ class RelevanceFilterTest(TestCase):
         assert articles[0].view_count == 4500
         assert articles[0].feed_rank == 0
 
-    def test_parse_rss_classifies_government_actor_in_description(self) -> None:
+    def test_rss_keeps_industry_topic_despite_government_snippet(self) -> None:
         xml = """
         <rss>
           <channel>
@@ -111,7 +111,7 @@ class RelevanceFilterTest(TestCase):
         )
 
         assert len(articles) == 1
-        assert articles[0].section is Section.GOVERNMENT
+        assert articles[0].section is Section.EXPORT_BUSINESS
 
     def test_government_news_requires_defense_context(self) -> None:
         # Given

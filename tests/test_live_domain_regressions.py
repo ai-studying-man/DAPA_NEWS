@@ -75,12 +75,7 @@ def test_agency_site_housing_requires_acquisition_fact(
         ),
         (
             "[Who Is ?] 김동관 한화그룹 수석부회장",
-            " ".join(
-                (
-                    "한화오션은 2026년 7월31일 방위사업청과",
-                    "KDDX 상세설계·선도함 건조 계약을 체결했다.",
-                )
-            ),
+            "한화오션은 7월 방위사업청과 KDDX 선도함 건조 계약을 체결했다.",
         ),
     ],
 )
@@ -119,3 +114,77 @@ def test_acquisition_headline_can_use_description_to_identify_agency() -> None:
     )
     # Then
     assert relevant
+
+
+@pytest.mark.parametrize(
+    ("title", "description"),
+    [
+        (
+            "우주항공· 방산 주 일제히 날았다…나라스페이스 29%↑·켄코아 26%↑",
+            "한화시스템, 현대로템 등이 상승했다.",
+        ),
+        (
+            "유진투자증권 한화시스템 레이저 무기 천광 새 성장축…목표가 상향",
+            "2024년 양산 계약 체결 후 전력화했다. 정부는 후속 사업을 추진한다.",
+        ),
+        (
+            "2호선 구로디지털단지역 연결 GD메트로타워 770실 분양",
+            "보라매 공원에서 신대방역을 거쳐 이어지는 교통망.",
+        ),
+        (
+            "스트림비젼, AI 실시간 자막·방송 모니터링 기능 강화",
+            "국방부, 한국수력원자력 등에 공급한 고객 실적을 갖췄다.",
+        ),
+    ],
+)
+def test_stock_and_civilian_headlines_cannot_use_background_defense_mentions(
+    title: str,
+    description: str,
+) -> None:
+    # Given / When
+    relevant = is_relevant_article(title, description, "국내언론")
+    # Then
+    assert not relevant
+
+
+@pytest.mark.parametrize(
+    ("title", "description", "expected"),
+    [
+        (
+            "한화시스템, EDGE그룹과 전략적 협력…UAE 합작법인 설립 검토",
+            "EDGE는 UAE 정부가 설립한 방산 기업이다. 중동 수출 경쟁력을 강화한다.",
+            Section.EXPORT_BUSINESS,
+        ),
+        (
+            "한화시스템, UAE 방산기업과 현지 통합대공망 구축",
+            "AI 플랫폼 공동개발 협력을 확대한다.",
+            Section.EXPORT_BUSINESS,
+        ),
+        (
+            "中 견제 나선 美 해군…韓·日 함정 도입 검토",
+            "한국 방산 및 조선업계의 기회다. 충남급 호위함이 후보로 거론됐다.",
+            Section.EXPORT_BUSINESS,
+        ),
+        (
+            "NC AI, 피지컬 AI 국책사업 참여",
+            "정부는 사업을 추진한다. 현대로템과 방산 분야 기술을 개발한다.",
+            Section.POLICY,
+        ),
+    ],
+)
+def test_incidental_foreign_or_domestic_government_does_not_set_topic(
+    title: str,
+    description: str,
+    expected: Section,
+) -> None:
+    # Given / When
+    section = classify_title(title, description=description, source="국내언론")
+    # Then
+    assert section is expected
+
+
+def test_boramae_aircraft_alias_keeps_explicit_military_context() -> None:
+    # Given / When
+    actual = is_relevant_article("보라매 초도양산 착수", "", "연합뉴스")
+    # Then
+    assert actual

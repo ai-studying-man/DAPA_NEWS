@@ -190,3 +190,21 @@ def test_naver_redirect_does_not_forward_credentials_to_another_host() -> None:
 def immediate_naver_waits() -> Iterator[None]:
     with patch("dapa_morning_brief.naver_rate_limit.sleep"):
         yield
+
+
+def test_naver_emphasis_does_not_split_korean_keywords() -> None:
+    xml = """<rss><channel><item>
+    <title>한화&lt;b&gt;시스템&lt;/b&gt;, 국방부 무기체계 계약 체결</title>
+    <originallink>https://publisher.example/contract</originallink>
+    <link>https://news.naver.com/contract</link>
+    <description>&lt;b&gt;국방&lt;/b&gt;부와 무기체계 계약을 체결했다.</description>
+    <pubDate>Thu, 17 Sep 2026 05:00:00 +0900</pubDate>
+    </item></channel></rss>"""
+    articles = naver_news.parse_naver_items(
+        xml,
+        days=1,
+        now=datetime(2026, 9, 17, tzinfo=UTC),
+    )
+    assert len(articles) == 1
+    assert articles[0].title.startswith("한화시스템,")
+    assert articles[0].description.startswith("국방부와")

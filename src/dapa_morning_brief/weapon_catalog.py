@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Final
 
-from dapa_morning_brief.entity_catalog import contains_any
+from dapa_morning_brief.entity_catalog import contains_any, contains_keyword
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +106,16 @@ def matching_weapons(text: str) -> tuple[WeaponEntry, ...]:
     return tuple(
         entry
         for entry in WEAPON_CATALOG
-        if contains_any(text, entry.aliases)
+        if any(
+            contains_keyword(text, alias)
+            and (
+                alias != "보라매"
+                or contains_any(
+                    text,
+                    ("전투기", "공군", "양산", "시험평가", "시험비행", "KAI", "KF-21"),
+                )
+            )
+            for alias in entry.aliases
+        )
         and (not entry.context or contains_any(text, entry.context))
     )

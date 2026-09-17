@@ -240,6 +240,7 @@ def _source_supports_korean_context(source: str) -> bool:
     normalized = source.strip().casefold()
     return (
         not normalized
+        or normalized.endswith(".kr")
         or HANGUL_PATTERN.search(normalized) is not None
         or _contains_any(normalized, KOREAN_LATIN_SOURCE_KEYWORDS)
     )

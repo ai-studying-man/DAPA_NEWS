@@ -87,7 +87,7 @@ class DefenseMinistryRelevanceTest(TestCase):
         # Then
         assert results == (False, False)
 
-    def test_foreign_ministry_news_keeps_korean_weapon_programs(self) -> None:
+    def test_foreign_ministry_purchase_of_korean_weapons_is_export(self) -> None:
         # Given
         title = "폴란드 국방부, K9 자주포 추가 도입 결정"
 
@@ -95,7 +95,7 @@ class DefenseMinistryRelevanceTest(TestCase):
         result = is_relevant_title(title), classify_title(title)
 
         # Then
-        assert result == (True, Section.WEAPON_SYSTEM)
+        assert result == (True, Section.EXPORT_BUSINESS)
 
     def test_foreign_only_news_is_rejected_across_all_sections(self) -> None:
         # Given

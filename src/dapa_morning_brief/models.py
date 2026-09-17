@@ -52,6 +52,7 @@ class Article:
     description: str = ""
     view_count: int | None = None
     feed_rank: int | None = None
+    search_provider: str = ""
 
 
 @dataclass(frozen=True, slots=True)

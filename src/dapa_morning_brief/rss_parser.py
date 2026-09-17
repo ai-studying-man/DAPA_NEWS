@@ -394,8 +394,17 @@ def _has_unrelated_headline(title: str, description: str) -> bool:
         ),
     )
     profile = title.strip().casefold().startswith(("[who is", "[인물탐구", "[인물소개"))
-    stock_movement = re.search(r"방산\s*주|%\s*[↑↓]|급등|급락|상한가|하한가", title)
-    if (financing or profile or stock_movement) and not _has_acquisition_fact(title):
+    stock_movement = re.search(
+        r"방산\s*주|%\s*[↑↓]|%대?\s*(?:강세|약세)|종목|급등|급락|상한가|하한가", title
+    )
+    recruiting = _contains_any(title, ("채용", "취업박람회", "취업 박람회"))
+    civilian_local = _contains_any(title, ("분양", "공약사업")) and not _contains_any(
+        title,
+        ("국방", "방산", "병영", "군 숙소", "군 관사", "군인 아파트"),
+    )
+    if (
+        financing or profile or stock_movement or recruiting or civilian_local
+    ) and not _has_acquisition_fact(title):
         return True
     incidental_agency = _contains_any(
         description, (*AGENCY_KEYWORDS, "국방부")

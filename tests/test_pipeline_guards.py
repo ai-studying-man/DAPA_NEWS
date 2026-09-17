@@ -11,6 +11,7 @@ from dapa_morning_brief.article_history import ArticleHistory
 from dapa_morning_brief.briefing import build_briefing
 from dapa_morning_brief.cli import KST, main
 from dapa_morning_brief.models import Article, Section
+from dapa_morning_brief.story_deduplication import are_same_story
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -90,3 +91,11 @@ def test_preparation_excludes_prior_collected_article_and_persists_new(
     ):
         assert main(["--dry-run"]) == 0
     assert path.read_bytes() == before
+
+
+def test_drone_demonstration_incident_wording_is_one_story() -> None:
+
+    assert are_same_story(
+        "국방부 주최 시연 행사서 무인기 잇따라 추락",
+        "국방부 주관 무인기 시연행사서 첨단드론 추락 속출 원인 조사",
+    )

@@ -188,3 +188,22 @@ def test_boramae_aircraft_alias_keeps_explicit_military_context() -> None:
     actual = is_relevant_article("보라매 초도양산 착수", "", "연합뉴스")
     # Then
     assert actual
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "4년 새 분양 급감한 구미…태영건설, 1355가구 데시앙 공급",
+        "진학사 캐치, 한화 등 하반기 채용 정보 소개",
+        "한화시스템, UAE 통합 대공망 구축 기대에 7%대 강세[종목 NOW]",
+        "보은군 공약사업 추진 속도…활력있는 경제도시 최우선",
+    ],
+)
+def test_commercial_headline_is_not_rescued_by_background_defense_facts(
+    title: str,
+) -> None:
+    assert not is_relevant_article(
+        title,
+        "한화시스템은 과거 무기체계 양산 계약을 체결했다. 방산 분야와 연관된다.",
+        "국내언론",
+    )

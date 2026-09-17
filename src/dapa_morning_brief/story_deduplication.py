@@ -154,10 +154,7 @@ def are_same_story(left_title: str, right_title: str) -> bool:
     if (
         shares_event_subject
         and (
-            (
-                left_tokens & EVENT_ACTION_TOKENS
-                and right_tokens & EVENT_ACTION_TOKENS
-            )
+            (left_tokens & EVENT_ACTION_TOKENS and right_tokens & EVENT_ACTION_TOKENS)
             or len(shared_tokens) >= MIN_SHARED_CONTEXT_TOKENS
         )
     ) or (
@@ -293,6 +290,8 @@ def _title_tokens(title: str) -> frozenset[str]:
 
 def _normalize_aliases(title: str) -> str:
     normalized = html.unescape(title).casefold()
+    normalized = re.sub(r"시연\s*(?:행사|회)(?:에서|서)?", "시연", normalized)
+    normalized = normalized.replace("무인기", "드론")
     normalized = re.sub(r"snt\s*다이내믹스", "snt", normalized)
     normalized = re.sub(r"k\s*-\s*방산", "방산", normalized)
     normalized = normalized.replace(

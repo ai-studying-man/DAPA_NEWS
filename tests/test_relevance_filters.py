@@ -172,8 +172,9 @@ class RelevanceFilterTest(TestCase):
             with self.subTest(title=title):
                 assert classify_title(title) is Section.EXPORT_BUSINESS
 
-    def test_named_domestic_weapon_program_needs_no_extra_anchor(self) -> None:
-        title = "238억 잠수함 링크-22 사업 추진"
+    def test_shared_weapon_program_requires_korean_context(self) -> None:
+        # Link-22 is multinational; the Korean acquisition context is required.
+        title = "한국 해군 238억 잠수함 링크-22 사업 추진"
 
         assert is_relevant_title(title) is True
         assert classify_title(title) is Section.WEAPON_SYSTEM

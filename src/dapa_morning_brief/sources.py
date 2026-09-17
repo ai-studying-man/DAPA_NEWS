@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Final
 
-AGENCY_KEYWORDS: Final[tuple[str, ...]] = ("방위사업청", "방사청")
+AGENCY_KEYWORDS: Final[tuple[str, ...]] = (
+    "방위사업청",
+    "방사청",
+    "Defense Acquisition Program Administration",
+    "DAPA",
+)
 
 POLICY_KEYWORDS: Final[tuple[str, ...]] = (
     "방위사업청",
@@ -14,6 +19,11 @@ POLICY_KEYWORDS: Final[tuple[str, ...]] = (
     "국방획득",
     "국방조달",
     "방위사업법",
+    "소요결정",
+    "획득제도",
+    "부품국산화",
+    "감항인증",
+    "후속군수지원",
     "국방예산",
     "국방정책",
     "선행연구",
@@ -33,6 +43,13 @@ WEAPON_SYSTEM_KEYWORDS: Final[tuple[str, ...]] = (
     "체계개발",
     "시험평가",
     "야전운용시험",
+    "실전 배치",
+    "작전 배치",
+    "군 인도",
+    "초도양산",
+    "성능개량",
+    "유도무기",
+    "무인항공기",
     "양산사업",
     "후속양산",
     "최초양산",
@@ -53,6 +70,20 @@ WEAPON_SYSTEM_KEYWORDS: Final[tuple[str, ...]] = (
     "미사일",
     "드론",
     "무인기",
+    "무인항공기",
+    "무인수상정",
+    "무인지상차량",
+    "장갑차",
+    "자주포",
+    "소총",
+    "탄약",
+    "레이더",
+    "소나",
+    "정찰위성",
+    "전자전",
+    "전술통신",
+    "화생방",
+    "대드론",
     "K2C1",
     "F-15K",
     "KF-16",
@@ -68,6 +99,20 @@ WEAPON_SYSTEM_KEYWORDS: Final[tuple[str, ...]] = (
 GENERIC_WEAPON_KEYWORDS: Final[tuple[str, ...]] = (
     "드론",
     "무인기",
+    "무인항공기",
+    "무인수상정",
+    "무인지상차량",
+    "장갑차",
+    "자주포",
+    "소총",
+    "탄약",
+    "레이더",
+    "소나",
+    "정찰위성",
+    "전자전",
+    "전술통신",
+    "화생방",
+    "대드론",
     "미사일",
     "전차",
     "전투기",
@@ -83,15 +128,10 @@ DOMESTIC_WEAPON_PROGRAM_KEYWORDS: Final[tuple[str, ...]] = (
     "L-SAM",
     "M-SAM",
     "천궁",
-    "K2",
     "K9 자주포",
     "K2C1",
     "F-15K",
     "KF-16",
-    "T-50",
-    "T-50i",
-    "링크-22",
-    "LINK-22",
 )
 
 DEFENSE_TECH_KEYWORDS: Final[tuple[str, ...]] = (
@@ -105,6 +145,9 @@ DEFENSE_TECH_KEYWORDS: Final[tuple[str, ...]] = (
 DEFENSE_ANCHOR_KEYWORDS: Final[tuple[str, ...]] = (
     *POLICY_KEYWORDS,
     "국방부",
+    "국방",
+    "군용",
+    "방산",
     "우리 군",
     "육군",
     "해군",
@@ -129,6 +172,18 @@ EXCLUDE_KEYWORDS: Final[tuple[str, ...]] = (
     "부동산",
     "코인",
     "가상자산",
+    "전 대통령",
+    "전대통령",
+    "윤 전 대통령",
+    "평양 무인기",
+    "사망",
+    "지병",
+    "사고",
+)
+
+SOFT_EXCLUDE_KEYWORDS: Final[tuple[str, ...]] = (
+    "선임",
+    "임명",
     "주가 전망",
     "증시",
     "주가",
@@ -144,13 +199,8 @@ EXCLUDE_KEYWORDS: Final[tuple[str, ...]] = (
     "리레이팅",
     "고문 영입",
     "영입",
-    "전 대통령",
-    "전대통령",
-    "윤 전 대통령",
-    "평양 무인기",
-    "사망",
-    "지병",
-    "사고",
+    "주식",
+    "영업이익",
 )
 
 UNTRUSTED_SOURCE_KEYWORDS: Final[tuple[str, ...]] = (

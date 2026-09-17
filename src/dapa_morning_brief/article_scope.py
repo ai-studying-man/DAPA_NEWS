@@ -1,19 +1,24 @@
-"""Confirm whether an article belongs to the Korea-or-U.S. service scope."""
+"""Require Korean defense context for domestic and foreign coverage."""
 
 import re
 from typing import Final
 
 from dapa_morning_brief.business_rules import DEFENSE_COMPANY_KEYWORDS
+from dapa_morning_brief.entity_catalog import contains_any as _contains_any
 from dapa_morning_brief.sources import (
     AGENCY_KEYWORDS,
     DOMESTIC_WEAPON_PROGRAM_KEYWORDS,
 )
+from dapa_morning_brief.weapon_catalog import matching_weapons
 
 STRONG_KOREAN_SCOPE_KEYWORDS: Final[tuple[str, ...]] = (
     *AGENCY_KEYWORDS,
     *DOMESTIC_WEAPON_PROGRAM_KEYWORDS,
     *DEFENSE_COMPANY_KEYWORDS,
     "대한민국",
+    "한미동맹",
+    "주한미군",
+    "한미 연합",
     "한국",
     "K-방산",
     "K방산",
@@ -38,8 +43,6 @@ KOREAN_POLICY_SCOPE_KEYWORDS: Final[tuple[str, ...]] = (
     "방위사업법",
     "국방예산",
     "국방정책",
-    "선행연구",
-    "탐색개발",
     "국방첨단인증",
     "국방품질",
     "국방기술품질원",
@@ -73,6 +76,8 @@ KOREAN_LATIN_SOURCE_KEYWORDS: Final[tuple[str, ...]] = (
 HANGUL_PATTERN: Final[re.Pattern[str]] = re.compile(r"[가-힣]")
 FOREIGN_CONTEXT_MARKERS: Final[tuple[str, ...]] = (
     "브라질",
+    "미국",
+    "美",
     "타이완",
     "대만",
     "중국",
@@ -201,8 +206,6 @@ def is_us_defense_institution_news(title: str) -> bool:
 
 def is_korean_defense_ministry_news(title: str, source: str) -> bool:
     """Return whether metadata identifies the Korean defense ministry or military."""
-    if _contains_any(source, KOREAN_OFFICIAL_SOURCE_KEYWORDS):
-        return True
     if has_foreign_primary_authority(title):
         return False
     if NON_CURRENT_DEFENSE_LEADER_PATTERN.search(title.strip()):
@@ -215,13 +218,13 @@ def is_korean_defense_ministry_news(title: str, source: str) -> bool:
 
 
 def article_scope_is_allowed(text: str, title: str, source: str) -> bool:
-    """Allow only confirmed Korean or U.S. defense coverage."""
-    if _contains_any(text, STRONG_KOREAN_SCOPE_KEYWORDS):
+    """Require Korean context even when a U.S. military institution is named."""
+    if matching_weapons(text) or _contains_any(text, STRONG_KOREAN_SCOPE_KEYWORDS):
         return True
     if has_foreign_primary_authority(title):
         return False
     if is_us_defense_institution_news(title):
-        return True
+        return False
     if not _source_supports_korean_context(source):
         return False
     return (
@@ -229,12 +232,8 @@ def article_scope_is_allowed(text: str, title: str, source: str) -> bool:
         or _contains_any(text, KOREAN_POLICY_SCOPE_KEYWORDS)
         or bool(DOMESTIC_GOVERNMENT_HEADLINE_PATTERN.search(title.strip()))
         or is_korean_defense_ministry_news(title, source)
+        or _contains_any(source, KOREAN_OFFICIAL_SOURCE_KEYWORDS)
     )
-
-
-def _contains_any(text: str, needles: tuple[str, ...]) -> bool:
-    normalized = text.casefold()
-    return any(needle.casefold() in normalized for needle in needles)
 
 
 def _source_supports_korean_context(source: str) -> bool:

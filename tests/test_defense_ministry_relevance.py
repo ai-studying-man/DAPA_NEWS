@@ -44,7 +44,7 @@ class DefenseMinistryRelevanceTest(TestCase):
         # Then
         assert results == (False, False, False, False)
 
-    def test_united_states_defense_ministry_news_remains_government(self) -> None:
+    def test_us_defense_news_requires_explicit_korean_link(self) -> None:
         # Given
         titles = (
             "미 국방부, 인도태평양 방위정책 발표",
@@ -59,9 +59,9 @@ class DefenseMinistryRelevanceTest(TestCase):
 
         # Then
         assert results == (
+            (False, Section.POLICY),
             (True, Section.GOVERNMENT),
-            (True, Section.GOVERNMENT),
-            (True, Section.GOVERNMENT),
+            (False, Section.POLICY),
         )
 
     def test_foreign_country_source_does_not_make_bare_ministry_domestic(
@@ -118,7 +118,7 @@ class DefenseMinistryRelevanceTest(TestCase):
         # Then
         assert results == (False, False, False, False, False, False, False, False)
 
-    def test_confirmed_korean_or_us_defense_news_is_allowed(self) -> None:
+    def test_korean_defense_news_is_allowed_but_unrelated_us_news_is_not(self) -> None:
         # Given
         titles = (
             "국방부, 서울안보대화 개최",
@@ -132,7 +132,7 @@ class DefenseMinistryRelevanceTest(TestCase):
         results = tuple(is_relevant_title(title) for title in titles)
 
         # Then
-        assert results == (True, True, True, True, True)
+        assert results == (True, True, True, False, False)
 
     def test_rss_source_metadata_routes_defense_ministry_to_government(self) -> None:
         # Given

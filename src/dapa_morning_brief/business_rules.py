@@ -3,11 +3,19 @@
 import re
 from typing import Final
 
+from dapa_morning_brief.entity_catalog import (
+    AMBIGUOUS_COMPANY_ALIASES,
+    COMPANY_ALIASES,
+)
+from dapa_morning_brief.entity_catalog import (
+    contains_any as _contains_any,
+)
 from dapa_morning_brief.sources import (
     DEFENSE_ANCHOR_KEYWORDS,
     GENERIC_WEAPON_KEYWORDS,
     WEAPON_SYSTEM_KEYWORDS,
 )
+from dapa_morning_brief.weapon_catalog import matching_weapons
 
 DEFENSE_INDUSTRY_KEYWORDS: Final[tuple[str, ...]] = (
     "방산",
@@ -25,6 +33,8 @@ DEFENSE_INDUSTRY_KEYWORDS: Final[tuple[str, ...]] = (
 )
 
 DEFENSE_COMPANY_KEYWORDS: Final[tuple[str, ...]] = (
+    *(alias for group in COMPANY_ALIASES for alias in group),
+    *AMBIGUOUS_COMPANY_ALIASES,
     "한화에어로스페이스",
     "한화시스템",
     "한화오션",
@@ -91,15 +101,12 @@ EXPORT_BUSINESS_TREND_KEYWORDS: Final[tuple[str, ...]] = (
 )
 
 DEFENSE_EXPORT_PROGRAM_KEYWORDS: Final[tuple[str, ...]] = (
-    "K2",
     "K9 자주포",
     "KF-21",
     "KDDX",
     "L-SAM",
     "M-SAM",
     "천궁",
-    "T-50",
-    "T-50i",
 )
 
 SPECIFIC_WEAPON_KEYWORDS: Final[tuple[str, ...]] = tuple(
@@ -126,9 +133,9 @@ def is_defense_export_news(text: str) -> bool:
             or _contains_any(text, SPECIFIC_WEAPON_KEYWORDS)
         )
     )
-    program_export = _contains_any(
-        text,
-        DEFENSE_EXPORT_PROGRAM_KEYWORDS,
+    program_export = (
+        bool(matching_weapons(text))
+        or _contains_any(text, DEFENSE_EXPORT_PROGRAM_KEYWORDS)
     ) and _has_export_direction(text)
     return industry_event or company_export or program_export
 
@@ -154,7 +161,3 @@ def _has_export_direction(text: str) -> bool:
         _contains_any(text, EXPORT_TRANSACTION_KEYWORDS)
         and _contains_any(text, FOREIGN_MARKET_KEYWORDS)
     )
-
-
-def _contains_any(text: str, needles: tuple[str, ...]) -> bool:
-    return any(needle.casefold() in text for needle in needles)

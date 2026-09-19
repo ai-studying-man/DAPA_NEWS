@@ -212,6 +212,10 @@ def _fetch(
         return _FeedResult((), succeeded=False)
     if feed.source == "google":
         articles = [replace(article, search_provider="google") for article in articles]
+    if feed.query:
+        articles = [
+            replace(article, matched_queries=(feed.query,)) for article in articles
+        ]
     _LOGGER.warning(
         "news_source_complete source=%s query=%s received_rows=%d accepted=%d",
         feed.source,

@@ -404,6 +404,76 @@ def test_build_briefing_collapses_same_corporate_ownership_event() -> None:
     assert len(selected) == 2
 
 
+def test_build_briefing_collapses_hanwha_family_event_across_sections() -> None:
+    published = datetime(2026, 9, 18, 0, 0, tzinfo=UTC)
+    articles = [
+        Article(
+            title="한화 방산 3사, 군인 가족 초청 '힐링데이'",
+            url="https://example.com/healing-day",
+            published_at=published,
+            source="아시아투데이",
+            section=Section.POLICY,
+            description="국방부 공동 개최…모범군인 60가족에 감사의 뜻 전달",
+        ),
+        Article(
+            title="한화, 모범군인 60가족 초청행사…헌신에 감사",
+            url="https://example.com/family-event",
+            published_at=published,
+            source="YTN",
+            section=Section.EXPORT_BUSINESS,
+            description=(
+                "한화에어로스페이스와 한화시스템, 한화오션은 군인가족의 날 "
+                "행사를 공동 개최했다."
+            ),
+        ),
+    ]
+
+    briefing = build_briefing(articles, max_per_section=5)
+
+    selected = [
+        article
+        for section_articles in briefing.sections.values()
+        for article in section_articles
+    ]
+    assert len(selected) == 1
+    assert selected[0].url == "https://example.com/healing-day"
+
+
+def test_build_briefing_collapses_same_canonical_url_across_sections() -> None:
+    published = datetime(2026, 9, 18, 0, 0, tzinfo=UTC)
+    articles = [
+        _article(
+            "방위사업 관련 정책 발표",
+            "정책뉴스",
+            Section.POLICY,
+            published,
+        ),
+        Article(
+            title="방산 정책 주요 내용",
+            url="https://example.com/news?id=7&utm_source=naver",
+            published_at=published,
+            source="기업뉴스",
+            section=Section.EXPORT_BUSINESS,
+        ),
+    ]
+    articles[0] = Article(
+        title=articles[0].title,
+        url="https://example.com/news?id=7&utm_medium=rss",
+        published_at=articles[0].published_at,
+        source=articles[0].source,
+        section=articles[0].section,
+    )
+
+    briefing = build_briefing(articles, max_per_section=5)
+
+    selected = [
+        article
+        for section_articles in briefing.sections.values()
+        for article in section_articles
+    ]
+    assert len(selected) == 1
+
+
 def test_build_briefing_collapses_cyber_gambling_self_report_coverage() -> None:
     # Given
     published = datetime(2026, 8, 6, 6, 0, tzinfo=UTC)

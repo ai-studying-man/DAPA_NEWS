@@ -6,6 +6,8 @@ import html
 import re
 from typing import TYPE_CHECKING, Final
 
+from dapa_morning_brief.article_history import canonical_url
+
 if TYPE_CHECKING:
     from dapa_morning_brief.models import Article
 
@@ -202,7 +204,14 @@ def are_same_articles(
     right_body: str = "",
 ) -> bool:
     """Compare article titles, RSS descriptions, and extracted bodies."""
-    if are_same_story(left.title, right.title):
+    if canonical_url(left.url) == canonical_url(right.url) or are_same_story(
+        left.title,
+        right.title,
+    ):
+        return True
+    left_event = _event_fingerprint(f"{left.title} {left.description}")
+    right_event = _event_fingerprint(f"{right.title} {right.description}")
+    if left_event is not None and left_event == right_event:
         return True
     if left_body and right_body and _have_similar_body_flow(left_body, right_body):
         return True
@@ -261,6 +270,14 @@ def _series_key(title: str) -> str | None:
 
 def _known_event_key(normalized_title: str) -> str | None:
     if (
+        "한화" in normalized_title
+        and any(
+            marker in normalized_title
+            for marker in ("힐링데이", "군인가족", "모범군인", "모범장병")
+        )
+    ):
+        return "한화군인가족힐링데이"
+    if (
         "공격헬기" in normalized_title or "미르온" in normalized_title
     ) and "엔진" in normalized_title:
         return "공격헬기엔진"
@@ -271,6 +288,21 @@ def _known_event_key(normalized_title: str) -> str | None:
     ):
         return "천궁ii수출확산"
     return None
+
+
+def _event_fingerprint(text: str) -> str | None:
+    normalized = _normalize_aliases(text)
+    compact = re.sub(r"[^0-9a-z가-힣]+", "", normalized)
+    if "한화" not in compact:
+        return None
+    if not any(
+        marker in compact
+        for marker in ("힐링데이", "군인가족", "군인가족의날", "모범군인", "모범장병")
+    ):
+        return None
+    if not any(marker in compact for marker in ("초청", "가족", "60가족")):
+        return None
+    return "한화군인가족힐링데이"
 
 
 def _title_tokens(title: str) -> frozenset[str]:

@@ -17,6 +17,7 @@ from dapa_morning_brief.article_scope import (
 from dapa_morning_brief.business_rules import (
     DEFENSE_INDUSTRY_KEYWORDS,
     contains_defense_anchor,
+    is_company_social_event,
     is_defense_business_news,
     is_defense_export_news,
     is_foreign_procurement_news,
@@ -122,7 +123,9 @@ def classify_title(
 ) -> Section:
     """Classify an article title into the closest newsletter section."""
     text = f"{title} {description}".casefold()
-    if _has_acquisition_policy_topic(title) or _is_public_procurement_headline(title):
+    if is_company_social_event(text):
+        section = Section.EXPORT_BUSINESS
+    elif _has_acquisition_policy_topic(title) or _is_public_procurement_headline(title):
         section = Section.POLICY
     elif _is_current_government_news(text, title, source):
         section = Section.GOVERNMENT
@@ -167,7 +170,7 @@ def is_relevant_article(title: str, description: str, source: str) -> bool:
         _has_acquisition_fact(text) or _is_defense_leadership_appointment(title)
     ):
         return False
-    if _contains_any(text, AGENCY_KEYWORDS):
+    if _contains_any(text, AGENCY_KEYWORDS) or is_company_social_event(text):
         return True
     if _contains_any(text, EXCLUDE_KEYWORDS):
         return False

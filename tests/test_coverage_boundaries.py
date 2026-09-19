@@ -4,6 +4,7 @@ from unittest import TestCase
 from dapa_morning_brief.models import Section
 from dapa_morning_brief.rss_parser import (
     classify_title,
+    is_relevant_article,
     is_relevant_title,
     parse_rss_items,
 )
@@ -181,6 +182,29 @@ class CoverageBoundaryTest(TestCase):
             with self.subTest(title=title):
                 assert is_relevant_title(title) is True
                 assert classify_title(title) is section
+
+    def test_hanwha_military_family_event_is_company_business_coverage(self) -> None:
+        samples = (
+            (
+                "한화 방산 3사, 군인 가족 초청 '힐링데이'",
+                "국방부 공동 개최…모범군인 60가족에 감사의 뜻 전달",
+            ),
+            (
+                "한화, 모범군인 60가족 초청행사…헌신에 감사",
+                (
+                    "한화에어로스페이스와 한화시스템, 한화오션은 군인가족의 날 "
+                    "행사를 공동 개최했다."
+                ),
+            ),
+        )
+
+        for title, description in samples:
+            with self.subTest(title=title):
+                assert is_relevant_article(title, description, "연합뉴스") is True
+                assert (
+                    classify_title(title, description=description)
+                    is Section.EXPORT_BUSINESS
+                )
 
     def test_standalone_military_subject_is_relevant(self) -> None:
         title = "군, AI 기반 드론 전력화 추진"

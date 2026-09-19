@@ -100,6 +100,17 @@ EXPORT_BUSINESS_TREND_KEYWORDS: Final[tuple[str, ...]] = (
     "나토 품질인증",
 )
 
+COMPANY_SOCIAL_EVENT_KEYWORDS: Final[tuple[str, ...]] = (
+    "힐링데이",
+    "군인가족의 날",
+    "군인가족",
+    "군인 가족",
+    "모범군인",
+    "모범장병",
+    "가족 초청",
+    "가족초청",
+)
+
 DEFENSE_EXPORT_PROGRAM_KEYWORDS: Final[tuple[str, ...]] = (
     "K9 자주포",
     "KF-21",
@@ -153,6 +164,15 @@ def is_defense_business_news(text: str) -> bool:
     return _contains_any(text, DEFENSE_COMPANY_KEYWORDS) and (
         contains_defense_anchor(text) or _contains_any(text, SPECIFIC_WEAPON_KEYWORDS)
     )
+
+
+def is_company_social_event(text: str) -> bool:
+    """Return whether text describes a defense-company military family event."""
+    company_context = _contains_any(
+        text,
+        ("한화", *DEFENSE_COMPANY_KEYWORDS),
+    )
+    return company_context and _contains_any(text, COMPANY_SOCIAL_EVENT_KEYWORDS)
 
 
 def contains_defense_anchor(text: str) -> bool:

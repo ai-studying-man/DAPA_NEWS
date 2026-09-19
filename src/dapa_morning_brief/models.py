@@ -53,6 +53,7 @@ class Article:
     view_count: int | None = None
     feed_rank: int | None = None
     search_provider: str = ""
+    matched_queries: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

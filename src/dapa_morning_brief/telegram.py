@@ -63,7 +63,7 @@ def send_telegram_messages(
     text: str,
 ) -> None:
     """Send the same message to one or more Telegram chats."""
-    for chat_id in chat_ids:
+    for chat_id in dict.fromkeys(chat_ids):
         send_telegram_message(token=token, chat_id=chat_id, text=text)
 
 

@@ -151,3 +151,25 @@ class TelegramTest(TestCase):
 
         # Then
         assert [payload["text"] for payload in sent_payloads] == [text]
+
+
+def test_duplicate_recipient_receives_each_message_only_once() -> None:
+    # Given
+    chat_ids = parse_chat_ids("1234, 1234, 5678")
+    sent_to: list[str] = []
+
+    def capture_delivery(*, token: str, chat_id: str, text: str) -> None:
+        assert token == TEST_TELEGRAM_TOKEN
+        assert text == "brief"
+        sent_to.append(chat_id)
+
+    # When
+    with patch("dapa_morning_brief.telegram.send_telegram_message", capture_delivery):
+        send_telegram_messages(
+            token=TEST_TELEGRAM_TOKEN,
+            chat_ids=chat_ids,
+            text="brief",
+        )
+
+    # Then
+    assert sent_to == ["1234", "5678"]

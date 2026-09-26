@@ -60,6 +60,14 @@ def test_backfill_when_section_has_fewer_than_three(count: int, copies: int) -> 
     # When: run the real CLI formatting and selection without external delivery.
     with (
         patch(
+            "dapa_morning_brief.selection_pipeline.fetch_article_bodies",
+            return_value=(),
+        ),
+        patch(
+            "dapa_morning_brief.selection_pipeline.create_semantic_index",
+            return_value=None,
+        ),
+        patch(
             "dapa_morning_brief.cli.collect_articles",
             side_effect=[daily * copies, [fallback]],
         ) as collect,

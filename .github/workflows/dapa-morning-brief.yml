@@ -173,6 +173,11 @@ jobs:
           key: dapa-article-history-v1-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
             dapa-article-history-v1-${{ github.ref_name }}-
+      - name: Cache semantic similarity model
+        uses: actions/cache@v4
+        with:
+          path: .dapa-model-cache
+          key: dapa-semantic-e5-761b726dd34fb83930e26aab4e9ac3899aa1fa78-${{ runner.os }}
       - name: Prepare complete morning brief
         id: prepare
         if: >-
@@ -378,6 +383,11 @@ jobs:
       - name: Install Copilot CLI
         continue-on-error: true
         run: npm install -g @github/copilot
+      - name: Cache semantic similarity model
+        uses: actions/cache@v4
+        with:
+          path: .dapa-model-cache
+          key: dapa-semantic-e5-761b726dd34fb83930e26aab4e9ac3899aa1fa78-${{ runner.os }}
       - name: Prepare AI-powered morning brief without Telegram
         run: >-
           uv run python -m dapa_morning_brief.cli

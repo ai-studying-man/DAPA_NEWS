@@ -7,7 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from dapa_morning_brief.cli import DEFAULT_DAYS, DEFAULT_FALLBACK_DAYS, KST, main
+from dapa_morning_brief.cli import KST, main
+from dapa_morning_brief.cli_arguments import DEFAULT_DAYS, DEFAULT_FALLBACK_DAYS
 from dapa_morning_brief.copilot_summary import ArticleBody
 from dapa_morning_brief.models import (
     Article,
@@ -86,6 +87,14 @@ class CliTest(TestCase):
         output = StringIO()
         with (
             patch(
+                "dapa_morning_brief.selection_pipeline.fetch_article_bodies",
+                return_value=(),
+            ),
+            patch(
+                "dapa_morning_brief.selection_pipeline.create_semantic_index",
+                return_value=None,
+            ),
+            patch(
                 "dapa_morning_brief.cli.collect_articles",
                 side_effect=[
                     [daily_policy],
@@ -155,7 +164,7 @@ class CliTest(TestCase):
                 return_value=(),
             ),
             patch(
-                "dapa_morning_brief.cli.fetch_article_bodies",
+                "dapa_morning_brief.selection_pipeline.fetch_article_bodies",
                 return_value=(article_body,),
             ),
             patch(

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final
 
+from dapa_morning_brief.article_history import canonical_url
 from dapa_morning_brief.models import Article, Briefing, Section
+from dapa_morning_brief.semantic_deduplication import conflicting_story_facts
 from dapa_morning_brief.sources import AGENCY_KEYWORDS
 from dapa_morning_brief.story_deduplication import are_same_articles
 from dapa_morning_brief.telegram_format import daily_quote, format_telegram_message
@@ -13,6 +15,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from dapa_morning_brief.copilot_summary import ArticleBody
+    from dapa_morning_brief.semantic_deduplication import SemanticIndex
 
 __all__ = ["build_briefing", "daily_quote", "format_telegram_message"]
 
@@ -39,6 +42,7 @@ def build_briefing(
     *,
     max_per_section: int,
     article_bodies: Iterable[ArticleBody] = (),
+    semantic_index: SemanticIndex | None = None,
 ) -> Briefing:
     """Select newest non-duplicate articles for each section."""
     buckets: dict[Section, list[Article]] = {section: [] for section in SECTION_ORDER}
@@ -53,11 +57,21 @@ def build_briefing(
         )
         for article in candidates:
             if any(
-                are_same_articles(
-                    article,
-                    selected,
-                    left_body=body_by_url.get(article.url, ""),
-                    right_body=body_by_url.get(selected.url, ""),
+                canonical_url(article.url) == canonical_url(selected.url)
+                or (
+                    not conflicting_story_facts(article.title, selected.title)
+                    and (
+                        are_same_articles(
+                            article,
+                            selected,
+                            left_body=body_by_url.get(article.url, ""),
+                            right_body=body_by_url.get(selected.url, ""),
+                        )
+                        or (
+                            semantic_index is not None
+                            and semantic_index.are_same(article, selected)
+                        )
+                    )
                 )
                 for selected in selected_articles
             ):
@@ -71,6 +85,7 @@ def build_briefing(
             candidates=candidates,
             selected_articles=selected_articles,
             body_by_url=body_by_url,
+            semantic_index=semantic_index,
         )
 
     return Briefing(
@@ -106,6 +121,7 @@ def _reserve_agency_article(
     candidates: list[Article],
     selected_articles: list[Article],
     body_by_url: dict[str, str],
+    semantic_index: SemanticIndex | None,
 ) -> None:
     if not section_articles or any(
         _is_agency_article(item) for item in section_articles
@@ -115,11 +131,21 @@ def _reserve_agency_article(
         if not _is_agency_article(candidate):
             continue
         if any(
-            are_same_articles(
-                candidate,
-                selected,
-                left_body=body_by_url.get(candidate.url, ""),
-                right_body=body_by_url.get(selected.url, ""),
+            canonical_url(candidate.url) == canonical_url(selected.url)
+            or (
+                not conflicting_story_facts(candidate.title, selected.title)
+                and (
+                    are_same_articles(
+                        candidate,
+                        selected,
+                        left_body=body_by_url.get(candidate.url, ""),
+                        right_body=body_by_url.get(selected.url, ""),
+                    )
+                    or (
+                        semantic_index is not None
+                        and semantic_index.are_same(candidate, selected)
+                    )
+                )
             )
             for selected in selected_articles
         ):

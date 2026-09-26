@@ -2,30 +2,26 @@
 
 from __future__ import annotations
 
-import argparse
 import logging
 import os
 import sys
 from datetime import date, datetime
 from io import TextIOWrapper
-from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 from zoneinfo import ZoneInfo
 
-from dapa_morning_brief.article_content import (
-    fetch_article_bodies,
-)
 from dapa_morning_brief.article_history import ArticleHistory
-from dapa_morning_brief.briefing import build_briefing, format_telegram_message
-from dapa_morning_brief.candidate_validation import (
-    BODY_DEDUP_CANDIDATE_MULTIPLIER,
-    validated_candidates,
+from dapa_morning_brief.briefing import format_telegram_message
+from dapa_morning_brief.cli_arguments import (
+    BriefNamespace,
+    brief_parser,
 )
 from dapa_morning_brief.collector import collect_articles
 from dapa_morning_brief.copilot_summary import summarize_article_bodies
 from dapa_morning_brief.models import PRACTICE_POINT_SECTIONS, Section
 from dapa_morning_brief.prepared_brief import PreparedBrief
+from dapa_morning_brief.selection_pipeline import SelectionWindow, select_candidates
 from dapa_morning_brief.telegram import (
     TelegramSendError,
     parse_chat_ids,
@@ -36,8 +32,6 @@ from dapa_morning_brief.weather import collect_weather_forecasts
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-DEFAULT_DAYS: Final = 1
-DEFAULT_FALLBACK_DAYS: Final = 2
 KST: Final[ZoneInfo] = ZoneInfo("Asia/Seoul")
 COPILOT_SUMMARY_TEMPLATE: Final = (
     "Copilot summary: generated={generated} fallback={fallback} bodies={bodies}\n"
@@ -48,27 +42,12 @@ SELECTED_TEMPLATE: Final = (
 )
 
 
-class BriefNamespace(argparse.Namespace):
-    """Typed command-line argument values."""
-
-    days: int = DEFAULT_DAYS
-    fallback_days: int = DEFAULT_FALLBACK_DAYS
-    max_per_section: int = 5
-    include_google: bool = True
-    google_only: bool = False
-    dry_run: bool = False
-    telegram_token: str | None = None
-    telegram_chat_id: str | None = None
-    prepare_output: Path | None = None
-    prepared_input: Path | None = None
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the DAPA morning brief job."""
     _configure_stdio()
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
     args = BriefNamespace()
-    _ = _parser().parse_args(argv, namespace=args)
+    _ = brief_parser().parse_args(argv, namespace=args)
     today = datetime.now(KST).date()
     if args.prepared_input is not None:
         return _send_prepared(args, today=today, path=args.prepared_input)
@@ -106,34 +85,13 @@ def _prepare_brief(
         include_google=args.include_google,
         only_google=args.google_only,
     )
-    articles = list(
-        validated_candidates(
-            history.exclude_recent(articles, today=today),
-            today=today,
-            max_age_days=days,
-            max_per_section=max_per_section,
-        ),
+    selection = select_candidates(
+        history.exclude_recent(articles, today=today),
+        SelectionWindow(today, days, max_per_section),
     )
-    collected_articles = tuple(articles)
-    candidate_briefing = build_briefing(
-        articles,
-        max_per_section=max_per_section * BODY_DEDUP_CANDIDATE_MULTIPLIER,
-    )
-    candidate_articles = tuple(
-        chain.from_iterable(candidate_briefing.sections.values()),
-    )
-    article_bodies = ()
-    if generate_practice_points:
-        article_bodies = fetch_article_bodies(
-            candidate_briefing, include_government=True
-        )
-        briefing = build_briefing(
-            candidate_articles,
-            max_per_section=max_per_section,
-            article_bodies=article_bodies,
-        )
-    else:
-        briefing = build_briefing(candidate_articles, max_per_section=max_per_section)
+    collected_articles = selection.articles
+    article_bodies = selection.bodies
+    briefing = selection.briefing
     missing_sections = {
         section
         for section in Section
@@ -145,32 +103,22 @@ def _prepare_brief(
             include_google=True,
             only_google=False,
         )
-        validated_fallback = validated_candidates(
+        selection = select_candidates(
             (
-                article
-                for article in history.exclude_recent(fallback_articles, today=today)
-                if article.section in missing_sections
+                *collected_articles,
+                *(
+                    article
+                    for article in history.exclude_recent(
+                        fallback_articles, today=today
+                    )
+                    if article.section in missing_sections
+                ),
             ),
-            today=today,
-            max_age_days=args.fallback_days,
-            max_per_section=max_per_section,
+            SelectionWindow(today, args.fallback_days, max_per_section),
         )
-        collected_articles += validated_fallback
-        articles.extend(validated_fallback)
-        candidate_briefing = build_briefing(
-            articles,
-            max_per_section=max_per_section * BODY_DEDUP_CANDIDATE_MULTIPLIER,
-            article_bodies=article_bodies,
-        )
-        if generate_practice_points:
-            article_bodies = fetch_article_bodies(
-                candidate_briefing, include_government=True
-            )
-        briefing = build_briefing(
-            tuple(chain.from_iterable(candidate_briefing.sections.values())),
-            max_per_section=max_per_section,
-            article_bodies=article_bodies,
-        )
+        collected_articles = selection.articles
+        article_bodies = selection.bodies
+        briefing = selection.briefing
     for section in Section:
         count = len(briefing.sections[section])
         _ = sys.stderr.write(
@@ -257,34 +205,6 @@ def _send_text(args: BriefNamespace, message: str) -> int:
         _ = sys.stderr.write(f"{error}\n")
         return 1
     return 0
-
-
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="dapa-morning-brief",
-        description="Collect DAPA-related news and send a Telegram morning brief.",
-    )
-    _ = parser.add_argument("--days", type=int, default=DEFAULT_DAYS)
-    _ = parser.add_argument(
-        "--fallback-days",
-        type=int,
-        default=DEFAULT_FALLBACK_DAYS,
-    )
-    _ = parser.add_argument(
-        "--max-per-section",
-        type=int,
-        choices=range(1, 6),
-        default=5,
-    )
-    _ = parser.add_argument("--include-google", action="store_true", default=True)
-    _ = parser.add_argument("--google-only", action="store_true")
-    _ = parser.add_argument("--dry-run", action="store_true")
-    _ = parser.add_argument("--telegram-token")
-    _ = parser.add_argument("--telegram-chat-id")
-    delivery = parser.add_mutually_exclusive_group()
-    _ = delivery.add_argument("--prepare-output", type=Path)
-    _ = delivery.add_argument("--prepared-input", type=Path)
-    return parser
 
 
 def _configure_stdio() -> None:

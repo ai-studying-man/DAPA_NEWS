@@ -41,7 +41,10 @@ def test_empty_production_brief_cannot_send_or_save(tmp_path: Path) -> None:
     path = tmp_path / "brief.json"
     with (
         patch("dapa_morning_brief.cli.collect_articles", return_value=[]),
-        patch("dapa_morning_brief.cli.fetch_article_bodies", return_value=()),
+        patch(
+            "dapa_morning_brief.selection_pipeline.fetch_article_bodies",
+            return_value=(),
+        ),
         patch("dapa_morning_brief.cli.send_telegram_messages") as send,
         pytest.raises(RuntimeError, match="No validated news"),
     ):
@@ -74,7 +77,10 @@ def test_preparation_excludes_prior_collected_article_and_persists_new(
     with (
         patch.dict(os.environ, {"DAPA_HISTORY_PATH": str(path)}),
         patch("dapa_morning_brief.cli.collect_articles", return_value=[prior, fresh]),
-        patch("dapa_morning_brief.cli.fetch_article_bodies", return_value=()),
+        patch(
+            "dapa_morning_brief.selection_pipeline.fetch_article_bodies",
+            return_value=(),
+        ),
         patch("dapa_morning_brief.cli.collect_weather_forecasts", return_value=()),
         patch("dapa_morning_brief.cli.summarize_article_bodies", return_value=()),
     ):

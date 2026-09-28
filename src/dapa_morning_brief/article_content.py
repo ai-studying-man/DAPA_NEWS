@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from dapa_morning_brief.copilot_summary import ArticleBody
 from dapa_morning_brief.models import PRACTICE_POINT_SECTIONS
 from dapa_morning_brief.source_config import USER_AGENT
+from dapa_morning_brief.structured_article import extract_structured_article
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -73,11 +74,10 @@ def extract_main_text(html_text: str) -> str | None:
         include_tables=False,
         output_format="txt",
     )
-    if extracted is None:
-        return None
-    normalized = " ".join(extracted.split())
+    normalized = " ".join((extracted or "").split())
     if len(normalized) < MIN_BODY_CHARACTERS:
-        return None
+        structured = extract_structured_article(html_text)
+        return structured[:MAX_BODY_CHARACTERS] if structured else None
     return normalized[:MAX_BODY_CHARACTERS]
 
 

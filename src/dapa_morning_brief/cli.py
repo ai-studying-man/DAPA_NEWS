@@ -23,6 +23,7 @@ from dapa_morning_brief.briefing import (
 )
 from dapa_morning_brief.candidate_validation import (
     BODY_DEDUP_CANDIDATE_MULTIPLIER,
+    trace_candidates,
     validated_candidates,
 )
 from dapa_morning_brief.cli_options import (
@@ -102,6 +103,7 @@ def _prepare_brief(
         include_google=args.include_google,
         only_google=args.google_only,
     )
+    trace_candidates("collected", articles)
     articles = list(
         validated_candidates(
             history.exclude_recent(articles, today=today),
@@ -111,6 +113,7 @@ def _prepare_brief(
         ),
     )
     collected_articles = tuple(articles)
+    trace_candidates("validated", articles)
     candidate_briefing = build_candidate_pool(
         articles,
         max_per_section=max_per_section * BODY_DEDUP_CANDIDATE_MULTIPLIER,
@@ -118,18 +121,12 @@ def _prepare_brief(
     candidate_articles = tuple(
         chain.from_iterable(candidate_briefing.sections.values()),
     )
-    article_bodies = ()
-    if generate_practice_points:
-        article_bodies = fetch_article_bodies(
-            candidate_briefing, include_government=True
-        )
-        briefing = build_briefing(
-            candidate_articles,
-            max_per_section=max_per_section,
-            article_bodies=article_bodies,
-        )
-    else:
-        briefing = build_briefing(candidate_articles, max_per_section=max_per_section)
+    article_bodies = fetch_article_bodies(candidate_briefing, include_government=True)
+    briefing = build_briefing(
+        candidate_articles,
+        max_per_section=max_per_section,
+        article_bodies=article_bodies,
+    )
     missing_sections = {
         section
         for section in Section
@@ -141,6 +138,7 @@ def _prepare_brief(
             include_google=True,
             only_google=False,
         )
+        trace_candidates("fallback_collected", fallback_articles)
         validated_fallback = validated_candidates(
             (
                 article
@@ -157,15 +155,15 @@ def _prepare_brief(
             articles,
             max_per_section=max_per_section * BODY_DEDUP_CANDIDATE_MULTIPLIER,
         )
-        if generate_practice_points:
-            article_bodies = fetch_article_bodies(
-                candidate_briefing, include_government=True
-            )
+        article_bodies = fetch_article_bodies(
+            candidate_briefing, include_government=True
+        )
         briefing = build_briefing(
             tuple(chain.from_iterable(candidate_briefing.sections.values())),
             max_per_section=max_per_section,
             article_bodies=article_bodies,
         )
+    trace_candidates("selected", chain.from_iterable(briefing.sections.values()))
     for section in Section:
         count = len(briefing.sections[section])
         _ = sys.stderr.write(

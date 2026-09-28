@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+import os
 import sys
+from hashlib import sha256
 from itertools import chain
 from typing import TYPE_CHECKING, Final
 
@@ -16,6 +19,7 @@ if TYPE_CHECKING:
     from dapa_morning_brief.models import Article
 
 BODY_DEDUP_CANDIDATE_MULTIPLIER: Final = 3
+_LOGGER = logging.getLogger(__name__)
 REJECTION_TEMPLATE: Final = "Freshness excluded: publisher_date={date} title={title}\n"
 FRESHNESS_SUMMARY_TEMPLATE: Final = (
     "Publisher freshness ({days}d): checked={checked} accepted={accepted} "
@@ -66,3 +70,19 @@ def validated_candidates(
                 f"Freshness excluded: publisher_date=unverifiable title={title}\n",
             )
     return freshness.articles
+
+
+def trace_candidates(stage: str, articles: Iterable[Article]) -> None:
+    """Record opt-in selection evidence without bodies, credentials, or raw URLs."""
+    if os.getenv("DAPA_NEWS_TRACE") != "1":
+        return
+    _LOGGER.setLevel(logging.INFO)
+    for article in articles:
+        _LOGGER.info(
+            "news_candidate stage=%s id=%s section=%s published=%s title=%s",
+            stage,
+            sha256(article.url.encode()).hexdigest()[:16],
+            article.section.value,
+            article.published_at.isoformat(),
+            " ".join(article.title.split()),
+        )

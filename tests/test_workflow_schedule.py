@@ -258,3 +258,16 @@ def test_workflow_does_not_bootstrap_press_release_cache() -> None:
     assert "DAPA_PRESS_RELEASE_CACHE" not in workflow
     assert "official press release cache" not in workflow.casefold()
     assert "initial-press-releases.json" not in workflow
+
+
+def test_workflow_enables_item_level_news_diagnostics() -> None:
+    # Given
+    workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(
+        encoding="utf-8"
+    )
+    # When
+    environment = workflow.split("env:\n", maxsplit=1)[1].split("jobs:\n", maxsplit=1)[
+        0
+    ]
+    # Then
+    assert 'DAPA_NEWS_TRACE: "1"' in environment

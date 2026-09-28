@@ -2,14 +2,25 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, Final
 
+from dapa_morning_brief.article_classification import classify_title
 from dapa_morning_brief.article_history import canonical_url
 from dapa_morning_brief.models import Article, Briefing, Section
+from dapa_morning_brief.selection_rules import (
+    MIN_SUBSTANTIVE_BODY,
+    is_acquisition_accountability,
+    is_photo_article,
+)
 from dapa_morning_brief.sources import AGENCY_KEYWORDS
 from dapa_morning_brief.story_deduplication import are_same_articles
 from dapa_morning_brief.story_signals import normalize_title
 from dapa_morning_brief.telegram_format import daily_quote, format_telegram_message
+from dapa_morning_brief.topic_boundaries import (
+    is_incidental_civic_agenda,
+    is_overseas_delivery,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -64,6 +75,15 @@ def build_candidate_pool(
             and not any(_is_agency_article(item) for item in selected)
         ):
             selected[-1] = agency
+        oversight = next(
+            (item for item in candidates if is_acquisition_accountability(item)), None
+        )
+        if (
+            selected
+            and oversight
+            and not any(is_acquisition_accountability(item) for item in selected)
+        ):
+            selected[-1] = oversight
         buckets[section] = selected
     return Briefing(
         sections={section: tuple(items) for section, items in buckets.items()}
@@ -81,17 +101,40 @@ def build_briefing(
     selected_articles: list[Article] = []
     body_by_url = {body.article_url: body.body for body in article_bodies}
     representatives: list[Article] = []
-    for article in sorted(articles, key=_article_rank):
-        if not any(
-            are_same_articles(
+    for candidate in sorted(articles, key=_article_rank):
+        article = candidate
+        body = body_by_url.get(article.url, "")
+        if body and is_incidental_civic_agenda(article.title, body):
+            continue
+        if body and is_overseas_delivery(article.title, body):
+            article = replace(
                 article,
-                selected,
-                left_body=body_by_url.get(article.url, ""),
-                right_body=body_by_url.get(selected.url, ""),
+                section=classify_title(
+                    article.title, description=body, source=article.source
+                )
+                or article.section,
             )
-            for selected in representatives
-        ):
+        duplicate = next(
+            (
+                index
+                for index, selected in enumerate(representatives)
+                if are_same_articles(
+                    article,
+                    selected,
+                    left_body=body,
+                    right_body=body_by_url.get(selected.url, ""),
+                )
+            ),
+            None,
+        )
+        if duplicate is None:
             representatives.append(article)
+        elif (
+            is_photo_article(representatives[duplicate])
+            and not is_photo_article(article)
+            and len(body) >= MIN_SUBSTANTIVE_BODY
+        ):
+            representatives[duplicate] = article
 
     for section in SECTION_ORDER:
         candidates = sorted(
@@ -154,12 +197,16 @@ def _reserve_agency_article(
     selected_articles: list[Article],
     body_by_url: dict[str, str],
 ) -> None:
-    if not section_articles or any(
-        _is_agency_article(item) for item in section_articles
-    ):
+    if not section_articles:
+        return
+    reserve_oversight = any(is_acquisition_accountability(item) for item in candidates)
+    qualifies = (
+        is_acquisition_accountability if reserve_oversight else _is_agency_article
+    )
+    if any(qualifies(item) for item in section_articles):
         return
     for candidate in candidates:
-        if not _is_agency_article(candidate):
+        if not qualifies(candidate):
             continue
         if any(
             are_same_articles(
@@ -172,10 +219,15 @@ def _reserve_agency_article(
         ):
             continue
         replaced = section_articles[-1]
-        if candidate.published_at < replaced.published_at:
+        if not reserve_oversight and candidate.published_at < replaced.published_at:
             continue
-        if replaced.view_count is not None and (
-            candidate.view_count is None or candidate.view_count < replaced.view_count
+        if (
+            not reserve_oversight
+            and replaced.view_count is not None
+            and (
+                candidate.view_count is None
+                or candidate.view_count < replaced.view_count
+            )
         ):
             continue
         section_articles[-1] = candidate

@@ -12,6 +12,13 @@ from dapa_morning_brief.entity_catalog import (
     SOLDIER_SERVICE_ALIASES,
     contains_any,
 )
+from dapa_morning_brief.event_evidence import (
+    have_concordant_event_leads,
+    have_conflicting_quantities,
+    have_distinct_weapons,
+    have_near_identical_headlines,
+    have_shared_short_event,
+)
 from dapa_morning_brief.story_signals import (
     EVENT_ACTION_TOKENS,
     EVENT_CONTEXT_TOKEN_GROUPS,
@@ -36,9 +43,13 @@ if TYPE_CHECKING:
 
 def are_same_story(left_title: str, right_title: str) -> bool:
     """Return whether two differently worded titles describe one event."""
-    if _have_conflicting_event_facts(
-        title_tokens(left_title),
-        title_tokens(right_title),
+    if (
+        have_distinct_weapons(left_title, right_title)
+        or have_conflicting_quantities(left_title, right_title)
+        or _have_conflicting_event_facts(
+            title_tokens(left_title),
+            title_tokens(right_title),
+        )
     ):
         return False
     left_normalized = normalize_title(left_title)
@@ -116,7 +127,25 @@ def _have_conflicting_event_facts(
         and left_tokens & contract
         and not left_tokens & delivery
     )
-    return bool(different_markets or conflicting_outcomes or different_stages)
+    briefing = frozenset({"브리핑", "기자회견"})
+    visit = frozenset({"방문", "시찰", "점검", "위문"})
+    different_public_actions = (
+        left_tokens & briefing
+        and not left_tokens & visit
+        and right_tokens & visit
+        and not right_tokens & briefing
+    ) or (
+        right_tokens & briefing
+        and not right_tokens & visit
+        and left_tokens & visit
+        and not left_tokens & briefing
+    )
+    return bool(
+        different_markets
+        or conflicting_outcomes
+        or different_stages
+        or different_public_actions
+    )
 
 
 def are_same_articles(
@@ -129,13 +158,30 @@ def are_same_articles(
     """Compare article titles, RSS descriptions, and extracted bodies."""
     if canonical_url(left.url) == canonical_url(right.url):
         return True
-    if _have_conflicting_event_facts(
-        title_tokens(left.title),
-        title_tokens(right.title),
-    ) or abs(left.published_at - right.published_at) > timedelta(days=2):
+    if (
+        have_distinct_weapons(left.title, right.title)
+        or have_conflicting_quantities(left.title, right.title, rounds_only=True)
+        or _have_conflicting_event_facts(
+            title_tokens(left.title),
+            title_tokens(right.title),
+        )
+        or abs(left.published_at - right.published_at) > timedelta(days=2)
+    ):
         return False
+    if have_conflicting_quantities(left.title, right.title):
+        return bool(
+            left_body and right_body and have_similar_bodies(left_body, right_body)
+        )
+    if have_near_identical_headlines(left.title, right.title):
+        return True
     if has_substantial_body(left_body) and has_substantial_body(right_body):
-        return have_similar_bodies(left_body, right_body)
+        return have_similar_bodies(left_body, right_body) or (
+            have_shared_short_event(
+                f"{left.title} {left.description}",
+                f"{right.title} {right.description}",
+            )
+            and have_concordant_event_leads(left_body, right_body)
+        )
     left_event = _event_fingerprint(left.title, f"{left.description} {left_body}")
     right_event = _event_fingerprint(right.title, f"{right.description} {right_body}")
     left_tokens = title_tokens(left.description)
@@ -149,6 +195,13 @@ def are_same_articles(
     )
     return (
         are_same_story(left.title, right.title)
+        or have_shared_short_event(
+            f"{left.title} {left_body or left.description}",
+            f"{right.title} {right_body or right.description}",
+        )
+        or bool(
+            left_body and right_body and have_shared_short_event(left_body, right_body)
+        )
         or (left_event is not None and left_event == right_event)
         or bool(left_body and right_body and have_similar_bodies(left_body, right_body))
         or similar_description

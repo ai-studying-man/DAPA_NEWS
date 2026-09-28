@@ -126,6 +126,31 @@ def has_acquisition_policy_topic(text: str) -> bool:
     )
 
 
+def has_acquisition_accountability_topic(title: str, context: str) -> bool:
+    """Identify agency-led procurement scrutiny for classification and selection."""
+    text = f"{title} {context}"
+    return (
+        _contains_any(title, AGENCY_KEYWORDS)
+        and _contains_any(
+            text, ("무전기", "부품", "군수품", "조달", "입찰", "계약", "획득", "납품")
+        )
+        and _contains_any(
+            text,
+            (
+                "논란",
+                "의혹",
+                "감사",
+                "부실",
+                "결함",
+                "원산지",
+                "재입찰",
+                "분쟁",
+                "취재파일",
+            ),
+        )
+    )
+
+
 def has_acquisition_fact(text: str) -> bool:
     """Detect concrete acquisition facts that can justify an exclusion exception."""
     return _contains_any(text, ACQUISITION_FACT_TERMS) and (

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import os
 import xml.etree.ElementTree as ET
 from datetime import UTC, datetime, time, timedelta, timezone
 
@@ -34,6 +36,19 @@ __all__ = [
 KST = timezone(timedelta(hours=9))
 SEND_WINDOW_START = time(hour=6, minute=30, tzinfo=KST)
 MAX_RSS_CHARACTERS = 5_000_000
+_LOGGER = logging.getLogger(__name__)
+
+
+def _trace_decision(decision: str, title: str, published_at: datetime | None) -> None:
+    if os.environ.get("DAPA_NEWS_TRACE") != "1":
+        return
+    _LOGGER.setLevel(logging.INFO)
+    _LOGGER.info(
+        "candidate_parse decision=%s published_at=%s title=%s",
+        decision,
+        published_at.isoformat() if published_at is not None else "unknown",
+        " ".join(title.split()),
+    )
 
 
 def parse_rss_items(
@@ -60,9 +75,14 @@ def parse_rss_items(
         description = _clean_description(_text(item, "description"))
         source = _source_from_item(item) or source_name
         published_at = _parse_date(_text(item, "pubDate"))
-        if not title or not link or published_at is None or published_at < cutoff:
+        if not title or not link or published_at is None:
+            _trace_decision("missing_metadata", title, published_at)
+            continue
+        if published_at < cutoff:
+            _trace_decision("stale", title, published_at)
             continue
         if not is_relevant_article(title, description, source):
+            _trace_decision("irrelevant", title, published_at)
             continue
         metadata_text = f"{title} {description}".casefold()
         if default_section is Section.GOVERNMENT and not is_current_government_news(
@@ -70,6 +90,7 @@ def parse_rss_items(
             title,
             source,
         ):
+            _trace_decision("irrelevant", title, published_at)
             continue
         section = default_section or classify_title(
             title,
@@ -77,6 +98,7 @@ def parse_rss_items(
             source=source,
         )
         if section is None:
+            _trace_decision("unclassified", title, published_at)
             continue
         articles.append(
             Article(
@@ -90,6 +112,7 @@ def parse_rss_items(
                 feed_rank=feed_rank,
             ),
         )
+        _trace_decision("accepted", title, published_at)
 
     return articles
 

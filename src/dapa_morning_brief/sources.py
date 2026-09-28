@@ -38,6 +38,8 @@ POLICY_KEYWORDS: Final[tuple[str, ...]] = (
 )
 
 WEAPON_SYSTEM_KEYWORDS: Final[tuple[str, ...]] = (
+    "무전기",
+    "훈련기",
     "무기체계",
     "전력화",
     "체계개발",
@@ -97,6 +99,8 @@ WEAPON_SYSTEM_KEYWORDS: Final[tuple[str, ...]] = (
 )
 
 GENERIC_WEAPON_KEYWORDS: Final[tuple[str, ...]] = (
+    "무전기",
+    "훈련기",
     "드론",
     "무인기",
     "무인항공기",

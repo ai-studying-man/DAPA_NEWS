@@ -26,6 +26,7 @@ env:
   PYTHONPATH: src
   TZ: Asia/Seoul
   MAX_RETRY_RUNS: 5
+  DAPA_NEWS_TRACE: "1"
 
 jobs:
   copilot-smoke-test:

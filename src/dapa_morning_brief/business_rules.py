@@ -215,7 +215,13 @@ def is_defense_business_headline(title: str) -> bool:
             title, ("사업 확대", "사업 확장", "사업화", "판매", "판다", "매출", "수익")
         )
     )
-    return entry or ownership or aerospace_partnership or commercialization
+    strategy = (
+        _contains_any(title, ("한화", *DEFENSE_COMPANY_KEYWORDS))
+        and is_defense_business_news(title)
+        and bool(re.search(r"체질\s*전환|미래\s*방산|종합\s*방산|사업\s*다각화", title))
+        and not re.search(r"시험(?:평가|비행)|체계개발|개발 착수|성능개량", title)
+    )
+    return any((entry, ownership, aerospace_partnership, commercialization, strategy))
 
 
 def is_company_social_event(text: str) -> bool:

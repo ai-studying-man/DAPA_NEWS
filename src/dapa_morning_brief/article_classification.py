@@ -27,6 +27,7 @@ from dapa_morning_brief.government_rules import (
     current_government_actor,
 )
 from dapa_morning_brief.headline_rules import (
+    has_acquisition_accountability_topic,
     has_acquisition_fact,
     has_acquisition_policy_topic,
     has_unrelated_headline,
@@ -49,8 +50,10 @@ from dapa_morning_brief.sources import (
 from dapa_morning_brief.topic_boundaries import (
     has_unrelated_foreign_subject,
     is_defense_public_action,
+    is_incidental_civic_agenda,
     is_opinion_headline,
     is_overseas_delivery,
+    is_overseas_weapon_use,
 )
 
 
@@ -61,10 +64,35 @@ def classify_title(
     source: str = "",
 ) -> Section | None:
     """Prefer the headline's topic; use snippets only to resolve missing context."""
-    if is_opinion_headline(title):
+    if (
+        is_opinion_headline(title)
+        or (
+            has_unrelated_foreign_subject(title)
+            and not is_us_defense_institution_news(title)
+        )
+        or is_incidental_civic_agenda(title, description)
+    ):
         return None
-    if is_overseas_delivery(title, description) or is_foreign_procurement_news(
-        title, f"{title} {description}"
+    service_policy = _contains_any(title, SOLDIER_SERVICE_ALIASES) and _contains_any(
+        title,
+        (
+            "조달",
+            "입찰",
+            "계약",
+            "보안 결함",
+            "보안결함",
+            "보안 취약점",
+            "보안취약점",
+            "정보 유출",
+            "정보유출",
+        ),
+    )
+    if service_policy or has_acquisition_accountability_topic(title, description):
+        return Section.POLICY
+    if (
+        is_overseas_delivery(title, description)
+        or is_overseas_weapon_use(title)
+        or is_foreign_procurement_news(title, f"{title} {description}")
     ):
         return Section.EXPORT_BUSINESS
     headline_section = _classify_topic(title, title.casefold(), source)
@@ -123,6 +151,7 @@ def is_relevant_article(title: str, description: str, source: str) -> bool:
     if (
         not headline_context
         or has_unrelated_foreign_subject(title)
+        or is_incidental_civic_agenda(title, description)
         or is_opinion_headline(title)
         or normalized_title.startswith(UNTRUSTED_TITLE_PREFIXES)
         or _contains_any(
@@ -177,7 +206,10 @@ def is_current_government_news(text: str, title: str, source: str) -> bool:
         ("장병", "복무여건", "병영", "국방정책", "국방예산", "서울안보대화"),
     )
     soldier_service = _contains_any(title, SOLDIER_SERVICE_ALIASES) and (
-        _contains_any(text, ("AI",))
+        _contains_any(
+            text,
+            ("AI", "행정", "복지", "서비스", "성과공유", "성과 공유", "개통", "이용"),
+        )
     )
     if (
         is_korean_defense_ministry_news(title, source)

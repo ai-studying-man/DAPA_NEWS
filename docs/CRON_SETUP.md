@@ -64,11 +64,17 @@ Telegram 발송에 성공한 날짜는 완료 캐시에 기록하므로 이후 �
 수행합니다. `dapa-morning-brief` repository dispatch는 production `scheduled-brief`로
 연결되고, `dapa-morning-brief-retry`는 자동 복구용입니다.
 
-과천시·대전시 당일 날씨는 Open-Meteo Forecast API의 KMA Seamless 모델을 우선
-사용합니다. KMA 모델 값이 비어 있으면 KMA 단기예보 API 프록시에서 당일 시간별
-예보를 조회해 최저·최고기온과 하늘상태를 계산합니다. 기상청 예보 API도 장애일
-때만 Open-Meteo 자동 모델로 재조회하며, 그래도 실패한 지역은 `수집 실패`로
-표시하고 전체 뉴스 발송은 계속합니다.
+과천시·대전시 당일 날씨는 KMA 단기예보 연결 프록시를 우선 사용하고, 실패하면
+Open-Meteo 자동 모델로 재조회합니다. 업데이트가 중단된 KMA Seamless 모델은
+호출하지 않습니다. 자동 모델의 일시적인 네트워크 오류·429·5xx는 최대 3회
+시도하며 도시·제공자·실패 유형을 기록합니다. 대체 예보는 기상청 단독 데이터가
+아닙니다. 모든 경로가 실패한 지역은 `수집 실패`로 표시하고 뉴스 발송은 계속합니다.
+
+`DAPA_NEWS_TRACE=1`이면 검색 항목별 파싱 결정과 수집·검증·최종 선정 단계의
+제목 및 발행 시각을 기록합니다. 본문과 인증 정보는 추적 로그에 저장하지 않습니다.
+`--dry-run`도 실제 발송과 같은 본문 기반 중복 검사를 수행하되 요약 모델과
+Telegram을 호출하지 않습니다. 기존 Actions 수동 preview는 Copilot 요약까지
+포함해 미리보기를 만들며 Telegram 키는 제공하지 않습니다.
 
 06:00 준비 실행에서는 Copilot CLI를 설치하고 최종 선정 기사 본문으로 20~30자의
 실무 참고 메시지만 생성합니다. 최종 Telegram 메시지와 생성 건수만 준비 JSON에
@@ -82,7 +88,12 @@ Repository Secrets에 다음 값을 등록합니다.
 ```text
 TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID
+NAVER_API_HUB_CLIENT_ID
+NAVER_API_HUB_CLIENT_SECRET
 ```
+
+Actions는 위 네이버 Secrets를 실행 환경의 `NAVER_CLIENT_ID`와
+`NAVER_CLIENT_SECRET`으로 전달합니다. 로컬 실행에서는 이 환경변수 이름을 사용합니다.
 
 ## 운영 환경
 
@@ -91,8 +102,14 @@ TELEGRAM_CHAT_ID
 
 ## 수집 우선순위
 
-1. 국방일보 방위사업 RSS
-2. Google News RSS 섹션별 검색
-3. 넓은 OR 검색과 단일 키워드 폴백
+기본 실행은 공식 RSS·게시판, 인증 정보가 있는 네이버 검색 API,
+Google News RSS를 함께 조회합니다. 네이버 인증 정보가 없으면 해당 경로를
+건너뛰고 로그에 남깁니다. Google만 요청하는 `--google-only` 옵션도 있습니다.
+
+최종 기사는 제공자 순서대로 무조건 채우지 않습니다. 발행 시각, 조회수·검색
+순위 등 기존 정렬 기준을 사용하고 본문·제목 기반 중복 제거 후 카테고리별
+5건을 선정합니다. 방위사업청 조달·계약 감시 보도는 기존 정원 안에서
+대표 후보 1건을 보존합니다. 전체 검색 결과가 없을 때 넓은 OR 검색과
+단일 키워드 Google 폴백을 시도합니다.
 
 기사 부족 시 억지로 내용을 만들지 않고 `수집 기사 없음`을 표시합니다.

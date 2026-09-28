@@ -37,6 +37,17 @@ def is_defense_tech_policy_news(text: str) -> bool:
     return contains_defense_anchor(text)
 
 
+def is_military_security_incident(title: str) -> bool:
+    """Distinguish investigations at Korean military targets from equipment news."""
+    return (
+        _contains_any(title, ("한국", "국군", "우리 군", "주한미군"))
+        and _contains_any(title, ("군기지", "군사기지", "군사기밀", "군사시설"))
+        and _contains_any(title, ("도청", "감청", "간첩", "기밀 유출", "기밀유출"))
+        and _contains_any(title, ("붙잡", "체포", "구속", "기소", "수사", "유출"))
+        and not _contains_any(title, ("개발", "시험평가", "양산"))
+    )
+
+
 def _contains_defense_tech_keyword(text: str) -> bool:
     if re.search(r"(?<![a-z0-9])ai(?![a-z0-9])", text):
         return True

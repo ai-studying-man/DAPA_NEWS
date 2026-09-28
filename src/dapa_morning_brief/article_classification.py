@@ -34,6 +34,7 @@ from dapa_morning_brief.headline_rules import (
     is_civilian_site_housing,
     is_defense_leadership_appointment,
     is_defense_tech_policy_news,
+    is_military_security_incident,
     is_public_procurement_headline,
     is_weapon_development_title,
     is_weapon_system_news,
@@ -213,6 +214,7 @@ def is_current_government_news(text: str, title: str, source: str) -> bool:
     )
     if (
         is_korean_defense_ministry_news(title, source)
+        or is_military_security_incident(title)
         or official_personnel_news
         or soldier_service
     ):

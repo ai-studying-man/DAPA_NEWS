@@ -82,3 +82,51 @@ def test_long_reports_with_different_opening_emphasis_share_event_details(
     duplicate = have_similar_bodies(left_body, right_opening + details)
     # Then
     assert duplicate is not short_extract
+
+
+@pytest.mark.parametrize(
+    ("event_day", "venue", "expected"),
+    [
+        ("28", "피스앤파크컨벤션", True),
+        ("29", "피스앤파크컨벤션", False),
+        ("28", "부산국제회의장", False),
+    ],
+)
+def test_same_announced_event_survives_independent_reporting(
+    event_day: str, venue: str, *, expected: bool
+) -> None:
+    # Given
+    left = (
+        "국방 통합 플랫폼이 민간 클라우드를 활용해 새로운 서비스를 준비한다. "
+        "군 가족과 장병이 모바일 환경에서 복지 업무를 처리하게 된다. "
+        "한국지능정보사회진흥원은 28일 서울 피스앤파크컨벤션에서 "
+        "국방부와 장병 통합 플랫폼 성과공유회를 열었다. "
+        "참석자들은 지난 사업 운영 결과를 검토했다. "
+        "이 시스템은 신분증을 디지털 형태로 전환하는 작업을 지원한다. "
+        "기존 인사 행정 복지 의료 교육 등 분산 시스템을 통합했다. "
+        "군 가족들도 종이 증명서 없이 모바일 인증을 사용할 수 있다. "
+        "입영 대상자와 예비역도 플랫폼을 통해 필요한 정보를 확인한다. "
+        "민간 클라우드 도입으로 안정성과 운영 효율성이 개선됐다. "
+        "네이버클라우드와 카카오엔터프라이즈가 기반 시설 구축에 참여했다. "
+        "다음 달 본격적인 서비스 개시를 앞두고 추가 기능을 검증하고 있다. "
+        "관계 기관은 보안과 개인정보 보호를 최우선으로 점검한다. "
+    )
+    right = (
+        "민간 클라우드 기반 장병 통합 플랫폼에 인공지능 비서가 도입된다. "
+        "모바일 서비스는 국방부의 행정 업무 처리 방식을 바꿀 전망이다. "
+        f"{event_day}일 국방부와 한국지능정보사회진흥원은 서울 "
+        f"{venue}에서 장병 플랫폼 성과공유회를 열고 계획을 밝혔다. "
+        "앞으로 인공지능이 개인별 복무 상황에 맞는 정보를 먼저 안내한다. "
+        "새로운 챗봇은 군 규정과 복지 혜택에 대해 답변한다. "
+        "전자지갑의 신분증과 증명서는 인증에 활용된다. "
+        "교육 일정과 의료 지원 안내 등도 함께 제공할 방침이다. "
+        "군 가족과 예비역을 포함한 이용자가 플랫폼에 접속할 수 있다. "
+        "분산 시스템 통합과 개인정보 보호를 동시에 고려했다. "
+        "네이버클라우드와 카카오엔터프라이즈는 안정적인 기반 시설을 제공한다. "
+        "관계 기관은 서비스 개시 이후에도 실제 이용 결과를 검증한다. "
+        "추가 기능은 다음 달 공개하며 보안 점검을 마친 뒤 제공할 계획이다. "
+    )
+    # When
+    duplicate = have_similar_bodies(left, right)
+    # Then
+    assert duplicate is expected

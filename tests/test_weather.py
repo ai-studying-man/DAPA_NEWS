@@ -11,7 +11,9 @@ from dapa_morning_brief.weather import collect_weather_forecasts
 def test_collect_weather_forecasts_maps_daily_open_meteo_data() -> None:
     # Given
     def respond(request: httpx.Request) -> httpx.Response:
-        assert request.url.params["models"] == "kma_seamless"
+        if request.url.host == "k-skill-proxy.nomadamas.org":
+            return httpx.Response(503)
+        assert "models" not in request.url.params
         weather_code = 0 if request.url.params["latitude"] == "37.4292" else 3
         return httpx.Response(
             200,
@@ -92,26 +94,18 @@ def test_collect_weather_forecasts_falls_back_when_kma_values_are_missing() -> N
     def respond(request: httpx.Request) -> httpx.Response:
         if request.url.host == "k-skill-proxy.nomadamas.org":
             requested_sources.append("kma_api")
-            return httpx.Response(503)
-        if "models" in request.url.params:
-            assert request.url.params["models"] == "kma_seamless"
-            requested_sources.append("kma_seamless")
-            weather_codes: list[int | None] = [None]
-            minimums: list[float | None] = [None]
-            maximums: list[float | None] = [None]
-        else:
-            requested_sources.append("open_meteo_auto")
-            weather_codes = [0]
-            minimums = [21.4]
-            maximums = [31.8]
+            return httpx.Response(
+                200, json={"response": {"body": {"items": {"item": []}}}}
+            )
+        requested_sources.append("open_meteo_auto")
         return httpx.Response(
             200,
             json={
                 "daily": {
                     "time": ["2026-08-22"],
-                    "weather_code": weather_codes,
-                    "temperature_2m_min": minimums,
-                    "temperature_2m_max": maximums,
+                    "weather_code": [0],
+                    "temperature_2m_min": [21.4],
+                    "temperature_2m_max": [31.8],
                 },
             },
         )
@@ -125,18 +119,15 @@ def test_collect_weather_forecasts_falls_back_when_kma_values_are_missing() -> N
 
     # Then
     assert requested_sources == [
-        "kma_seamless",
         "kma_api",
         "open_meteo_auto",
-        "kma_seamless",
         "kma_api",
         "open_meteo_auto",
     ]
     assert all(forecast.minimum_celsius == 21.4 for forecast in forecasts)
 
 
-def test_collect_weather_forecasts_uses_kma_daily_forecast_when_open_meteo_empty(
-) -> None:
+def test_collect_weather_forecasts_prefers_available_kma_daily_forecast() -> None:
     # Given
     requested_locations: list[tuple[str, str]] = []
 
@@ -185,18 +176,6 @@ def test_collect_weather_forecasts_uses_kma_daily_forecast_when_open_meteo_empty
                                 ],
                             },
                         },
-                    },
-                },
-            )
-        if "models" in request.url.params:
-            return httpx.Response(
-                200,
-                json={
-                    "daily": {
-                        "time": ["2026-08-22"],
-                        "weather_code": [None],
-                        "temperature_2m_min": [None],
-                        "temperature_2m_max": [None],
                     },
                 },
             )

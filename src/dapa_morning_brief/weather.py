@@ -2,23 +2,31 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, Final
+from http import HTTPStatus
+from typing import TYPE_CHECKING, Final
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from dapa_morning_brief.models import WeatherForecast
+from dapa_morning_brief.weather_payloads import (
+    ForecastPayload,
+    KmaForecastItem,
+    KmaForecastPayload,
+)
 
 if TYPE_CHECKING:
     from datetime import date
 
 OPEN_METEO_FORECAST_URL: Final = "https://api.open-meteo.com/v1/forecast"
-OPEN_METEO_MODEL: Final = "kma_seamless"
+MAX_WEATHER_ATTEMPTS: Final = 3
+MAX_RETRY_DELAY: Final = 5
+_LOGGER = logging.getLogger(__name__)
 KMA_PROXY_BASE_URL: Final = (
-    os.environ.get("KSKILL_PROXY_BASE_URL")
-    or "https://k-skill-proxy.nomadamas.org"
+    os.environ.get("KSKILL_PROXY_BASE_URL") or "https://k-skill-proxy.nomadamas.org"
 ).rstrip("/")
 KMA_FORECAST_URL: Final = f"{KMA_PROXY_BASE_URL}/v1/korea-weather/forecast"
 KST_TIMEZONE: Final = "Asia/Seoul"
@@ -37,57 +45,6 @@ WEATHER_LOCATIONS: Final[tuple[WeatherLocation, ...]] = (
     WeatherLocation(city="과천시", latitude=37.4292, longitude=126.9876),
     WeatherLocation(city="대전시", latitude=36.3504, longitude=127.3845),
 )
-
-
-class _DailyForecastPayload(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
-
-    time: tuple[str, ...]
-    weather_code: tuple[int | None, ...]
-    temperature_2m_min: tuple[float | None, ...]
-    temperature_2m_max: tuple[float | None, ...]
-
-
-class _ForecastPayload(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
-
-    daily: _DailyForecastPayload
-
-
-class _KmaForecastItem(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(
-        frozen=True,
-        populate_by_name=True,
-    )
-
-    category: str
-    forecast_date: str = Field(alias="fcstDate")
-    forecast_time: str = Field(alias="fcstTime")
-    forecast_value: str = Field(alias="fcstValue")
-
-
-class _KmaForecastItems(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
-
-    item: tuple[_KmaForecastItem, ...]
-
-
-class _KmaForecastBody(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
-
-    items: _KmaForecastItems
-
-
-class _KmaForecastResponse(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
-
-    body: _KmaForecastBody
-
-
-class _KmaForecastPayload(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True)
-
-    response: _KmaForecastResponse
 
 
 def collect_weather_forecasts(
@@ -110,51 +67,19 @@ def _collect_with_client(
     forecasts: list[WeatherForecast] = []
     for location in WEATHER_LOCATIONS:
         forecast: WeatherForecast | None = None
-        for model in (OPEN_METEO_MODEL, None):
-            if model is None:
-                try:
-                    forecast = _collect_kma_forecast(
-                        as_of=as_of,
-                        client=client,
-                        location=location,
-                    )
-                except (httpx.HTTPError, ValidationError, ValueError):
-                    forecast = None
-                if forecast is not None:
-                    break
-            try:
-                params = {
-                    "latitude": location.latitude,
-                    "longitude": location.longitude,
-                    "daily": "weather_code,temperature_2m_min,temperature_2m_max",
-                    "timezone": KST_TIMEZONE,
-                    "start_date": as_of.isoformat(),
-                    "end_date": as_of.isoformat(),
-                }
-                if model is not None:
-                    params["models"] = model
-                response = client.get(OPEN_METEO_FORECAST_URL, params=params)
-                _ = response.raise_for_status()
-                payload = _ForecastPayload.model_validate_json(response.content)
-                day_index = payload.daily.time.index(as_of.isoformat())
-                weather_code = payload.daily.weather_code[day_index]
-                minimum_celsius = payload.daily.temperature_2m_min[day_index]
-                maximum_celsius = payload.daily.temperature_2m_max[day_index]
-                if (
-                    weather_code is None
-                    or minimum_celsius is None
-                    or maximum_celsius is None
-                ):
-                    continue
-                forecast = WeatherForecast(
-                    city=location.city,
-                    condition=_weather_condition(weather_code),
-                    minimum_celsius=minimum_celsius,
-                    maximum_celsius=maximum_celsius,
-                )
-                break
-            except (httpx.HTTPError, ValidationError, ValueError):
-                continue
+        try:
+            forecast = _collect_kma_forecast(
+                as_of=as_of, client=client, location=location
+            )
+        except (httpx.HTTPError, ValueError) as error:
+            _log_failure(location.city, "kma_proxy", error)
+        if forecast is None:
+            _LOGGER.warning(
+                "weather_fallback city=%s provider=open_meteo_auto", location.city
+            )
+            forecast = _collect_open_meteo(as_of, client, location)
+        if forecast is None:
+            _LOGGER.error("weather_unavailable city=%s", location.city)
         forecasts.append(
             forecast
             if forecast is not None
@@ -166,6 +91,97 @@ def _collect_with_client(
             ),
         )
     return tuple(forecasts)
+
+
+def _log_failure(city: str, provider: str, error: httpx.HTTPError | ValueError) -> None:
+    match error:
+        case httpx.HTTPStatusError(response=response):
+            status = response.status_code
+        case httpx.HTTPError() | ValueError():
+            status = 0
+    _LOGGER.warning(
+        "weather_request_failed city=%s provider=%s status=%s reason=%s",
+        city,
+        provider,
+        status,
+        type(error).__name__,
+    )
+
+
+def _collect_open_meteo(
+    as_of: date,
+    client: httpx.Client,
+    location: WeatherLocation,
+) -> WeatherForecast | None:
+    params = {
+        "latitude": location.latitude,
+        "longitude": location.longitude,
+        "daily": "weather_code,temperature_2m_min,temperature_2m_max",
+        "timezone": KST_TIMEZONE,
+        "start_date": as_of.isoformat(),
+        "end_date": as_of.isoformat(),
+    }
+    for attempt in range(1, MAX_WEATHER_ATTEMPTS + 1):
+        delay = attempt
+        try:
+            response = client.get(OPEN_METEO_FORECAST_URL, params=params)
+            _ = response.raise_for_status()
+            daily = ForecastPayload.model_validate_json(response.content).daily
+            rows = tuple(
+                zip(
+                    daily.time,
+                    daily.weather_code,
+                    daily.temperature_2m_min,
+                    daily.temperature_2m_max,
+                    strict=True,
+                )
+            )
+            for day, code, minimum, maximum in rows:
+                if (
+                    day == as_of.isoformat()
+                    and code is not None
+                    and minimum is not None
+                    and maximum is not None
+                ):
+                    return WeatherForecast(
+                        city=location.city,
+                        condition=_weather_condition(code),
+                        minimum_celsius=minimum,
+                        maximum_celsius=maximum,
+                    )
+            _LOGGER.warning(
+                "weather_missing_day city=%s provider=open_meteo_auto", location.city
+            )
+            break
+        except httpx.HTTPStatusError as error:
+            _log_failure(location.city, "open_meteo_auto", error)
+            if (
+                error.response.status_code != HTTPStatus.TOO_MANY_REQUESTS
+                and error.response.status_code < HTTPStatus.INTERNAL_SERVER_ERROR
+            ):
+                break
+            retry_after = (
+                error.response.headers["Retry-After"]
+                if "Retry-After" in error.response.headers
+                else str(attempt)
+            )
+            delay = int(retry_after) if retry_after.isdigit() else MAX_RETRY_DELAY + 1
+            if delay > MAX_RETRY_DELAY:
+                break
+        except httpx.HTTPError as error:
+            _log_failure(location.city, "open_meteo_auto", error)
+        except ValueError as error:
+            _log_failure(location.city, "open_meteo_auto", error)
+            break
+        if attempt < MAX_WEATHER_ATTEMPTS:
+            _LOGGER.warning(
+                "weather_retry city=%s attempt=%s delay=%s",
+                location.city,
+                attempt + 1,
+                delay,
+            )
+            time.sleep(delay)
+    return None
 
 
 def _collect_kma_forecast(
@@ -182,7 +198,7 @@ def _collect_kma_forecast(
         },
     )
     _ = response.raise_for_status()
-    payload = _KmaForecastPayload.model_validate_json(response.content)
+    payload = KmaForecastPayload.model_validate_json(response.content)
     target_date = as_of.strftime("%Y%m%d")
     items = tuple(
         item
@@ -190,21 +206,15 @@ def _collect_kma_forecast(
         if item.forecast_date == target_date
     )
     hourly_temperatures = [
-        float(item.forecast_value)
-        for item in items
-        if item.category == "TMP"
+        float(item.forecast_value) for item in items if item.category == "TMP"
     ]
     if not hourly_temperatures:
         return None
     minimum_temperatures = [
-        float(item.forecast_value)
-        for item in items
-        if item.category == "TMN"
+        float(item.forecast_value) for item in items if item.category == "TMN"
     ]
     maximum_temperatures = [
-        float(item.forecast_value)
-        for item in items
-        if item.category == "TMX"
+        float(item.forecast_value) for item in items if item.category == "TMX"
     ]
     return WeatherForecast(
         city=location.city,
@@ -227,52 +237,26 @@ KMA_SKY_CONDITIONS: Final[dict[int, str]] = {
 }
 
 
-def _kma_weather_condition(items: tuple[_KmaForecastItem, ...]) -> str:
+def _kma_weather_condition(items: tuple[KmaForecastItem, ...]) -> str:
     precipitation_codes = {
-        int(item.forecast_value)
-        for item in items
-        if item.category == "PTY"
+        int(item.forecast_value) for item in items if item.category == "PTY"
     }
     for code in (4, 3, 2, 1):
         if code in precipitation_codes:
             return KMA_PRECIPITATION_CONDITIONS[code]
-    sky_codes = {
-        int(item.forecast_value)
-        for item in items
-        if item.category == "SKY"
-    }
+    sky_codes = {int(item.forecast_value) for item in items if item.category == "SKY"}
     return KMA_SKY_CONDITIONS.get(max(sky_codes, default=1), "맑음")
 
 
 WEATHER_CONDITIONS: Final[dict[int, str]] = {
     0: "맑음",
-    1: "구름 조금",
-    2: "구름 조금",
+    **dict.fromkeys((1, 2), "구름 조금"),
     3: "흐림",
-    45: "안개",
-    48: "안개",
-    51: "이슬비",
-    53: "이슬비",
-    55: "이슬비",
-    56: "이슬비",
-    57: "이슬비",
-    61: "비",
-    63: "비",
-    65: "비",
-    66: "비",
-    67: "비",
-    71: "눈",
-    73: "눈",
-    75: "눈",
-    77: "눈",
-    80: "비",
-    81: "비",
-    82: "비",
-    85: "눈",
-    86: "눈",
-    95: "뇌우",
-    96: "뇌우",
-    99: "뇌우",
+    **dict.fromkeys((45, 48), "안개"),
+    **dict.fromkeys((51, 53, 55, 56, 57), "이슬비"),
+    **dict.fromkeys((61, 63, 65, 66, 67, 80, 81, 82), "비"),
+    **dict.fromkeys((71, 73, 75, 77, 85, 86), "눈"),
+    **dict.fromkeys((95, 96, 99), "뇌우"),
 }
 
 

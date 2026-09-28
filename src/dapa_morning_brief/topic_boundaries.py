@@ -68,6 +68,8 @@ CIVIC_ACTOR: Final[re.Pattern[str]] = re.compile(
     r"지자체|시청|도청|시의회|도의회|도의원|시의원|[가-힣]+(?:시|군)[,\uff0c은는와과]"
 )
 MIN_CIVIC_TOPICS: Final = 2
+OVERSEAS_CONTEXT_LIMIT: Final = 600
+LIFECYCLE_LEAD_LIMIT: Final = 160
 
 
 def is_incidental_civic_agenda(title: str, context: str) -> bool:
@@ -127,13 +129,15 @@ def is_overseas_delivery(title: str, description: str) -> bool:
     )
 
 
-def is_overseas_weapon_use(title: str) -> bool:
+def is_overseas_weapon_use(title: str, context: str = "") -> bool:
     """Separate overseas use of Korean weapons from domestic development trials."""
+    lead = f"{title} {context[:OVERSEAS_CONTEXT_LIMIT]}"
     return (
-        contains_any(title, FOREIGN_MARKET_KEYWORDS)
-        and contains_any(title, ("홍보 영상", "홍보영상", "현지 운용", "현지운용"))
+        contains_any(lead, FOREIGN_MARKET_KEYWORDS)
+        and contains_any(lead, ("홍보 영상", "홍보영상", "현지 운용", "현지운용"))
         and not contains_any(
-            title, ("시험", "개발", "성능개량", "초도양산", "국내 전력화")
+            f"{title} {context[:LIFECYCLE_LEAD_LIMIT]}",
+            ("시험", "개발", "성능개량", "초도양산", "국내 전력화"),
         )
         and any("해외도입" not in entry.domain for entry in matching_weapons(title))
     )

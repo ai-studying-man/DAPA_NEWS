@@ -35,6 +35,36 @@ from dapa_morning_brief.models import Article, Section
             "",
             Section.WEAPON_SYSTEM,
         ),
+        (
+            "[이 시각 세계] 사막서 여유롭게 차 한 잔‥뒤편엔 천무",
+            (
+                "사막에서 차를 마시는 남성들 뒤로 한국산 천무가 등장한다. "
+                "사우디아라비아 군 당국이 공개한 홍보 영상이다."
+            ),
+            Section.EXPORT_BUSINESS,
+        ),
+        (
+            "천무 성능개량 시험 완료",
+            (
+                "국내 전력화를 위한 시험을 마쳤다. "
+                "배경으로 사우디 군 천무 홍보 영상도 소개했다."
+            ),
+            Section.WEAPON_SYSTEM,
+        ),
+        (
+            "천무 새 장비 공개",
+            (
+                "국내 전력화를 위한 천무 성능개량 시험 결과를 공개했다. "
+                "배경으로 사우디 군 천무 홍보 영상도 소개했다."
+            ),
+            Section.WEAPON_SYSTEM,
+        ),
+        (
+            "천무 운용 현황 공개",
+            "우리 군 부대의 교육 계획을 소개한다. " * 40
+            + "사우디 군 천무 홍보 영상은 과거 사례다.",
+            Section.WEAPON_SYSTEM,
+        ),
     ],
 )
 def test_body_refines_category_only_for_headline_led_overseas_delivery(

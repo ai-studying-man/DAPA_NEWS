@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING, Final
 
-from dapa_morning_brief.article_classification import classify_title
 from dapa_morning_brief.article_history import canonical_url
 from dapa_morning_brief.models import Article, Briefing, Section
 from dapa_morning_brief.selection_rules import (
@@ -20,6 +19,7 @@ from dapa_morning_brief.telegram_format import daily_quote, format_telegram_mess
 from dapa_morning_brief.topic_boundaries import (
     is_incidental_civic_agenda,
     is_overseas_delivery,
+    is_overseas_weapon_use,
 )
 
 if TYPE_CHECKING:
@@ -106,14 +106,11 @@ def build_briefing(
         body = body_by_url.get(article.url, "")
         if body and is_incidental_civic_agenda(article.title, body):
             continue
-        if body and is_overseas_delivery(article.title, body):
-            article = replace(
-                article,
-                section=classify_title(
-                    article.title, description=body, source=article.source
-                )
-                or article.section,
-            )
+        if body and (
+            is_overseas_delivery(article.title, body)
+            or is_overseas_weapon_use(article.title, body)
+        ):
+            article = replace(article, section=Section.EXPORT_BUSINESS)
         duplicate = next(
             (
                 index

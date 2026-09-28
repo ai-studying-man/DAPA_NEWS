@@ -1,139 +1,52 @@
-"""Near-duplicate story detection for collected news titles."""
+"""Compare news events before category quotas are applied."""
 
 from __future__ import annotations
 
-import html
-import re
-from typing import TYPE_CHECKING, Final
+from datetime import timedelta
+from typing import TYPE_CHECKING
 
 from dapa_morning_brief.article_history import canonical_url
+from dapa_morning_brief.body_similarity import has_substantial_body, have_similar_bodies
+from dapa_morning_brief.entity_catalog import (
+    COMPANY_ALIASES,
+    SOLDIER_SERVICE_ALIASES,
+    contains_any,
+)
+from dapa_morning_brief.story_signals import (
+    EVENT_ACTION_TOKENS,
+    EVENT_CONTEXT_TOKEN_GROUPS,
+    EVENT_MARKET_TOKENS,
+    MIN_CONTAINMENT_RATIO,
+    MIN_DESCRIPTION_CONTAINMENT_RATIO,
+    MIN_DESCRIPTION_SHARED_TOKENS,
+    MIN_EVENT_SUBJECT_TOKEN_LENGTH,
+    MIN_SHARED_CONTEXT_TOKENS,
+    MIN_SHARED_TOKENS,
+    NEGATIVE_EVENT_OUTCOME_TOKENS,
+    POSITIVE_EVENT_OUTCOME_TOKENS,
+    known_event_key,
+    normalize_title,
+    series_key,
+    title_tokens,
+)
 
 if TYPE_CHECKING:
     from dapa_morning_brief.models import Article
 
-LOW_SIGNAL_TOKENS: Final[frozenset[str]] = frozenset(
-    {
-        "관련",
-        "논의",
-        "발표",
-        "사진",
-        "속보",
-        "종합",
-        "단독",
-        "하는",
-        "전격",
-        "최신",
-    },
-)
-GENERIC_SERIES_HEADERS: Final[frozenset[str]] = frozenset(
-    {"기고", "단독", "사설", "속보", "인터뷰", "종합", "포토"},
-)
-EVENT_ACTION_TOKENS: Final[frozenset[str]] = frozenset(
-    {
-        "개발",
-        "계약",
-        "도입",
-        "발사",
-        "배치",
-        "수주",
-        "시험",
-        "완료",
-        "진수",
-        "착수",
-        "체결",
-        "취소",
-        "표창",
-        "조성",
-        "출범",
-        "구축",
-        "협약",
-        "업무협약",
-        "검토",
-    },
-)
-EVENT_CONTEXT_TOKEN_GROUPS: Final[tuple[frozenset[str], ...]] = (
-    frozenset(
-        {
-            "매입",
-            "베팅",
-            "인수",
-            "지분",
-            "출자",
-            "투자",
-            "확대",
-            "확보",
-        },
-    ),
-)
-EVENT_MARKET_TOKENS: Final[frozenset[str]] = frozenset(
-    {
-        "인도네시아",
-        "폴란드",
-        "루마니아",
-        "사우디",
-        "아랍에미리트",
-        "이라크",
-        "미국",
-        "캐나다",
-        "호주",
-        "필리핀",
-        "태국",
-        "말레이시아",
-        "페루",
-    },
-)
-POSITIVE_EVENT_OUTCOME_TOKENS: Final[frozenset[str]] = frozenset(
-    {"체결", "완료", "성공", "수주", "착수"},
-)
-NEGATIVE_EVENT_OUTCOME_TOKENS: Final[frozenset[str]] = frozenset(
-    {"취소", "무산", "실패", "중단"},
-)
-MIN_SHARED_TOKENS: Final = 3
-MIN_SHARED_CONTEXT_TOKENS: Final = 2
-MIN_CONTAINMENT_RATIO: Final = 0.5
-MIN_DESCRIPTION_SHARED_TOKENS: Final = 4
-MIN_DESCRIPTION_CONTAINMENT_RATIO: Final = 0.7
-BODY_SHINGLE_SIZE: Final = 3
-MIN_BODY_SHARED_SHINGLES: Final = 8
-MIN_BODY_CONTAINMENT_RATIO: Final = 0.5
-MIN_BODY_SHARED_TOKENS: Final = 30
-MIN_EVENT_SUBJECT_TOKEN_LENGTH: Final = 6
-MIN_TOKEN_LENGTH_FOR_PARTICLE_STRIP: Final = 3
-ADMINISTRATIVE_SUFFIXES: Final[tuple[str, ...]] = (
-    "특별자치도",
-    "특별자치시",
-    "광역시",
-    "특별시",
-    "시",
-    "도",
-    "군",
-)
-KOREAN_PARTICLES: Final[tuple[str, ...]] = (
-    "으로",
-    "에서",
-    "에게",
-    "까지",
-    "부터",
-    "은",
-    "는",
-    "이",
-    "가",
-    "을",
-    "를",
-    "에",
-    "의",
-    "로",
-)
-
 
 def are_same_story(left_title: str, right_title: str) -> bool:
     """Return whether two differently worded titles describe one event."""
-    left_normalized = _normalize_title(left_title)
-    right_normalized = _normalize_title(right_title)
-    left_series = _series_key(left_title)
-    right_series = _series_key(right_title)
-    left_known_event = _known_event_key(left_normalized)
-    right_known_event = _known_event_key(right_normalized)
+    if _have_conflicting_event_facts(
+        title_tokens(left_title),
+        title_tokens(right_title),
+    ):
+        return False
+    left_normalized = normalize_title(left_title)
+    right_normalized = normalize_title(right_title)
+    left_series = series_key(left_title)
+    right_series = series_key(right_title)
+    left_known_event = known_event_key(left_normalized)
+    right_known_event = known_event_key(right_normalized)
     if (
         left_normalized == right_normalized
         or (left_series is not None and left_series == right_series)
@@ -141,13 +54,10 @@ def are_same_story(left_title: str, right_title: str) -> bool:
     ):
         return True
 
-    left_tokens = _title_tokens(left_title)
-    right_tokens = _title_tokens(right_title)
+    left_tokens = title_tokens(left_title)
+    right_tokens = title_tokens(right_title)
     if left_tokens == right_tokens:
         return True
-
-    if _have_conflicting_event_facts(left_tokens, right_tokens):
-        return False
 
     shared_tokens = left_tokens & right_tokens
     shares_event_subject = any(
@@ -193,7 +103,20 @@ def _have_conflicting_event_facts(
         right_tokens & POSITIVE_EVENT_OUTCOME_TOKENS
         and left_tokens & NEGATIVE_EVENT_OUTCOME_TOKENS
     )
-    return bool(different_markets or conflicting_outcomes)
+    delivery = frozenset({"인도", "납품", "배치", "전력화"})
+    contract = frozenset({"계약", "체결", "수주"})
+    different_stages = (
+        left_tokens & delivery
+        and not left_tokens & contract
+        and right_tokens & contract
+        and not right_tokens & delivery
+    ) or (
+        right_tokens & delivery
+        and not right_tokens & contract
+        and left_tokens & contract
+        and not left_tokens & delivery
+    )
+    return bool(different_markets or conflicting_outcomes or different_stages)
 
 
 def are_same_articles(
@@ -204,150 +127,110 @@ def are_same_articles(
     right_body: str = "",
 ) -> bool:
     """Compare article titles, RSS descriptions, and extracted bodies."""
-    if canonical_url(left.url) == canonical_url(right.url) or are_same_story(
-        left.title,
-        right.title,
-    ):
+    if canonical_url(left.url) == canonical_url(right.url):
         return True
-    left_event = _event_fingerprint(f"{left.title} {left.description}")
-    right_event = _event_fingerprint(f"{right.title} {right.description}")
-    if left_event is not None and left_event == right_event:
-        return True
-    if left_body and right_body and _have_similar_body_flow(left_body, right_body):
-        return True
-    if not left.description or not right.description:
+    if _have_conflicting_event_facts(
+        title_tokens(left.title),
+        title_tokens(right.title),
+    ) or abs(left.published_at - right.published_at) > timedelta(days=2):
         return False
-
-    left_tokens = _title_tokens(left.description)
-    right_tokens = _title_tokens(right.description)
+    if has_substantial_body(left_body) and has_substantial_body(right_body):
+        return have_similar_bodies(left_body, right_body)
+    left_event = _event_fingerprint(left.title, f"{left.description} {left_body}")
+    right_event = _event_fingerprint(right.title, f"{right.description} {right_body}")
+    left_tokens = title_tokens(left.description)
+    right_tokens = title_tokens(right.description)
     shared_tokens = left_tokens & right_tokens
-    if len(shared_tokens) < MIN_DESCRIPTION_SHARED_TOKENS:
-        return False
     shorter_token_count = min(len(left_tokens), len(right_tokens))
-    return len(shared_tokens) / shorter_token_count >= MIN_DESCRIPTION_CONTAINMENT_RATIO
-
-
-def _have_similar_body_flow(left_body: str, right_body: str) -> bool:
-    left_tokens = _title_tokens(left_body)
-    right_tokens = _title_tokens(right_body)
-    shared_tokens = left_tokens & right_tokens
-    if len(shared_tokens) >= MIN_BODY_SHARED_TOKENS:
-        shorter_token_count = min(len(left_tokens), len(right_tokens))
-        if len(shared_tokens) / shorter_token_count >= MIN_BODY_CONTAINMENT_RATIO:
-            return True
-
-    left_shingles = _body_shingles(left_body)
-    right_shingles = _body_shingles(right_body)
-    shared_shingles = left_shingles & right_shingles
-    if len(shared_shingles) < MIN_BODY_SHARED_SHINGLES:
-        return False
-    shorter_shingle_count = min(len(left_shingles), len(right_shingles))
-    return len(shared_shingles) / shorter_shingle_count >= MIN_BODY_CONTAINMENT_RATIO
-
-
-def _body_shingles(body: str) -> frozenset[tuple[str, ...]]:
-    tokens = re.findall(r"[0-9a-z]+|[가-힣]+", html.unescape(body).casefold())
-    return frozenset(
-        tuple(tokens[index : index + BODY_SHINGLE_SIZE])
-        for index in range(len(tokens) - BODY_SHINGLE_SIZE + 1)
+    similar_description = (
+        len(shared_tokens) >= MIN_DESCRIPTION_SHARED_TOKENS
+        and len(shared_tokens) / shorter_token_count
+        >= MIN_DESCRIPTION_CONTAINMENT_RATIO
+    )
+    return (
+        are_same_story(left.title, right.title)
+        or (left_event is not None and left_event == right_event)
+        or bool(left_body and right_body and have_similar_bodies(left_body, right_body))
+        or similar_description
     )
 
 
-def _normalize_title(title: str) -> str:
-    source_stripped = re.sub(r"\s+-\s+[^-]+$", "", html.unescape(title))
-    return re.sub(r"[^0-9a-z가-힣]+", "", source_stripped.casefold())
-
-
-def _series_key(title: str) -> str | None:
-    matched = re.match(r"^\s*\[([^]]+)]", html.unescape(title))
-    if matched is None:
-        return None
-    normalized = re.sub(r"[^0-9a-z가-힣]+", "", matched.group(1).casefold())
-    if normalized in GENERIC_SERIES_HEADERS:
-        return None
-    return normalized or None
-
-
-def _known_event_key(normalized_title: str) -> str | None:
+def _event_fingerprint(title: str, description: str) -> str | None:
+    text = f"{title} {description}"
     if (
-        "한화" in normalized_title
-        and any(
-            marker in normalized_title
-            for marker in ("힐링데이", "군인가족", "모범군인", "모범장병")
+        contains_any(title, ("대전",))
+        and contains_any(title, ("육군",))
+        and contains_any(title, ("AX", "AI", "인공지능 전환"))
+        and contains_any(text, ("협력체계", "대덕경찰서", "AX 대전 거점"))
+    ):
+        return "육군-대전-ax협력거점"
+    if (
+        (
+            contains_any(title, (*SOLDIER_SERVICE_ALIASES, "장병용 AI"))
+            or (
+                contains_any(title, ("국방부 최초 민간 클라우드",))
+                and contains_any(text, SOLDIER_SERVICE_ALIASES)
+            )
         )
+        and contains_any(text, ("AI",))
+        and contains_any(
+            text,
+            (
+                "가동",
+                "출시",
+                "개통",
+                "시대 연다",
+                "정식 서비스",
+                "고도화",
+                "탑재",
+                "들어온다",
+            ),
+        )
+        and not contains_any(title, ("취약", "유출", "장애", "중단"))
+    ):
+        return "장병이음-ai"
+    company = next(
+        (group[0] for group in COMPANY_ALIASES if contains_any(title, group)), None
+    )
+    markets = title_tokens(title) & EVENT_MARKET_TOKENS
+    partnership = contains_any(
+        title,
+        (
+            "MOU",
+            "협력",
+            "협약",
+            "공급망",
+            "시장 진출",
+            "진출 추진",
+            "현지화",
+            "교두보",
+            "supply chain",
+            "local partners",
+        ),
+    ) and not contains_any(title, ("계약", "납품", "인도", "수주 확정"))
+    counterparty = contains_any(
+        text,
+        (
+            "FEMIA",
+            "멕시코 항공우주산업협회",
+            "멕시코항공우주산업협회",
+        ),
+    )
+    if company and len(markets) == 1 and partnership and counterparty:
+        return f"{company}:{next(iter(markets))}:femia-partnership"
+    if (
+        contains_any(title, ("기술교범", "교범"))
+        and contains_any(title, ("확대", "표준화", "적용", "공유"))
+        and contains_any(text, ("S1000D",))
+    ):
+        return "s1000d-manual-standardization"
+    if (
+        contains_any(title, ("한화",))
+        and contains_any(
+            text,
+            ("힐링데이", "군인가족", "군인 가족", "모범군인", "모범장병"),
+        )
+        and contains_any(text, ("초청", "가족"))
     ):
         return "한화군인가족힐링데이"
-    if (
-        "공격헬기" in normalized_title or "미르온" in normalized_title
-    ) and "엔진" in normalized_title:
-        return "공격헬기엔진"
-    if "대드론" in normalized_title and "요격" in normalized_title:
-        return "대드론요격"
-    if ("천궁ii" in normalized_title or "천궁2" in normalized_title) and (
-        "중동3개국" in normalized_title or "세계방공망" in normalized_title
-    ):
-        return "천궁ii수출확산"
     return None
-
-
-def _event_fingerprint(text: str) -> str | None:
-    normalized = _normalize_aliases(text)
-    compact = re.sub(r"[^0-9a-z가-힣]+", "", normalized)
-    if "한화" not in compact:
-        return None
-    if not any(
-        marker in compact
-        for marker in ("힐링데이", "군인가족", "군인가족의날", "모범군인", "모범장병")
-    ):
-        return None
-    if not any(marker in compact for marker in ("초청", "가족", "60가족")):
-        return None
-    return "한화군인가족힐링데이"
-
-
-def _title_tokens(title: str) -> frozenset[str]:
-    normalized_aliases = _normalize_aliases(title)
-    source_stripped = re.sub(r"\s+-\s+[^-]+$", "", normalized_aliases)
-    raw_tokens: list[str] = re.findall(
-        r"[0-9a-z]+|[가-힣]+",
-        source_stripped,
-    )
-    tokens = {
-        token
-        for raw_token in raw_tokens
-        if (token := _compact_title_token(raw_token)) and token not in LOW_SIGNAL_TOKENS
-    }
-    return frozenset(tokens)
-
-
-def _normalize_aliases(title: str) -> str:
-    normalized = html.unescape(title).casefold()
-    normalized = re.sub(r"시연\s*(?:행사|회)(?:에서|서)?", "시연", normalized)
-    normalized = normalized.replace("무인기", "드론")
-    normalized = re.sub(r"snt\s*다이내믹스", "snt", normalized)
-    normalized = re.sub(r"k\s*-\s*방산", "방산", normalized)
-    normalized = normalized.replace(
-        "방산혁신클러스터지역협의회",
-        "방산혁신클러스터 지역협의회",
-    )
-    normalized = normalized.replace("방산혁신단지", "방산혁신클러스터")
-    return normalized.replace("대통령표창", "대통령 표창")
-
-
-def _compact_title_token(token: str) -> str:
-    if len(token) == 1 and not token.isdigit():
-        return ""
-    if token.endswith("하는") and len(token) > len("하는"):
-        return token.removesuffix("하는")
-    if "연구원" in token:
-        return "연구원"
-    for suffix in ADMINISTRATIVE_SUFFIXES:
-        if token.endswith(suffix) and len(token) > len(suffix) + 1:
-            return token.removesuffix(suffix)
-    for particle in KOREAN_PARTICLES:
-        if (
-            token.endswith(particle)
-            and len(token) >= MIN_TOKEN_LENGTH_FOR_PARTICLE_STRIP
-        ):
-            return token.removesuffix(particle)
-    return token

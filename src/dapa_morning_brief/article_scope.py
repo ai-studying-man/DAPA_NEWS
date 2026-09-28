@@ -4,6 +4,7 @@ import re
 from typing import Final
 
 from dapa_morning_brief.business_rules import DEFENSE_COMPANY_KEYWORDS
+from dapa_morning_brief.entity_catalog import SOLDIER_SERVICE_ALIASES
 from dapa_morning_brief.entity_catalog import contains_any as _contains_any
 from dapa_morning_brief.sources import (
     AGENCY_KEYWORDS,
@@ -36,6 +37,7 @@ KOREAN_CONTEXT_KEYWORDS: Final[tuple[str, ...]] = (
     "국산",
 )
 KOREAN_POLICY_SCOPE_KEYWORDS: Final[tuple[str, ...]] = (
+    *SOLDIER_SERVICE_ALIASES,
     "방위사업",
     "방위력개선",
     "국방획득",
@@ -219,12 +221,13 @@ def is_korean_defense_ministry_news(title: str, source: str) -> bool:
 
 def article_scope_is_allowed(text: str, title: str, source: str) -> bool:
     """Require Korean context even when a U.S. military institution is named."""
+    if has_foreign_primary_authority(title) or is_us_defense_institution_news(title):
+        return bool(matching_weapons(title)) or _contains_any(
+            title,
+            (*STRONG_KOREAN_SCOPE_KEYWORDS, "韓"),
+        )
     if matching_weapons(text) or _contains_any(text, STRONG_KOREAN_SCOPE_KEYWORDS):
         return True
-    if has_foreign_primary_authority(title):
-        return False
-    if is_us_defense_institution_news(title):
-        return False
     if not _source_supports_korean_context(source):
         return False
     return (

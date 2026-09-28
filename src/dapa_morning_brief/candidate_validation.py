@@ -7,7 +7,7 @@ from itertools import chain
 from typing import TYPE_CHECKING, Final
 
 from dapa_morning_brief.article_content import filter_articles_by_publisher_date
-from dapa_morning_brief.briefing import build_briefing
+from dapa_morning_brief.briefing import build_candidate_pool
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -31,7 +31,7 @@ def validated_candidates(
     max_per_section: int,
 ) -> tuple[Article, ...]:
     """Deduplicate bounded candidates and verify original publication dates."""
-    candidate_briefing = build_briefing(
+    candidate_briefing = build_candidate_pool(
         tuple(articles),
         max_per_section=max_per_section * BODY_DEDUP_CANDIDATE_MULTIPLIER,
     )

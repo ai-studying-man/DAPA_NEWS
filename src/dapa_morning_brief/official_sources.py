@@ -47,9 +47,11 @@ def parse_board_articles(
             url=release.url,
             published_at=datetime.combine(release.published_on, time.min, tzinfo=KST),
             source=release.agency,
-            section=classify_title(release.title, source=release.agency),
+            section=section,
         )
         for release in releases
         if cutoff <= release.published_on <= today
         and is_relevant_article(release.title, "", release.agency)
+        and (section := classify_title(release.title, source=release.agency))
+        is not None
     ]

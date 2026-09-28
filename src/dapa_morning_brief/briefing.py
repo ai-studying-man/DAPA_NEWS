@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final
 
+from dapa_morning_brief.article_history import canonical_url
 from dapa_morning_brief.models import Article, Briefing, Section
 from dapa_morning_brief.sources import AGENCY_KEYWORDS
 from dapa_morning_brief.story_deduplication import are_same_articles
+from dapa_morning_brief.story_signals import normalize_title
 from dapa_morning_brief.telegram_format import daily_quote, format_telegram_message
 
 if TYPE_CHECKING:
@@ -14,7 +16,12 @@ if TYPE_CHECKING:
 
     from dapa_morning_brief.copilot_summary import ArticleBody
 
-__all__ = ["build_briefing", "daily_quote", "format_telegram_message"]
+__all__ = [
+    "build_briefing",
+    "build_candidate_pool",
+    "daily_quote",
+    "format_telegram_message",
+]
 
 SECTION_ORDER: Final[tuple[Section, ...]] = (
     Section.GOVERNMENT,
@@ -34,6 +41,35 @@ SOURCE_PRIORITY: Final[tuple[str, ...]] = (
 )
 
 
+def build_candidate_pool(
+    articles: Iterable[Article], *, max_per_section: int
+) -> Briefing:
+    """Retain title variants for body inspection within the existing candidate cap."""
+    buckets: dict[Section, list[Article]] = {section: [] for section in SECTION_ORDER}
+    urls: set[str] = set()
+    titles: set[str] = set()
+    for article in sorted(articles, key=_article_rank):
+        url, title = canonical_url(article.url), normalize_title(article.title)
+        if url in urls or title in titles:
+            continue
+        urls.add(url)
+        titles.add(title)
+        buckets[article.section].append(article)
+    for section, candidates in buckets.items():
+        selected = candidates[:max_per_section]
+        agency = next((item for item in candidates if _is_agency_article(item)), None)
+        if (
+            selected
+            and agency
+            and not any(_is_agency_article(item) for item in selected)
+        ):
+            selected[-1] = agency
+        buckets[section] = selected
+    return Briefing(
+        sections={section: tuple(items) for section, items in buckets.items()}
+    )
+
+
 def build_briefing(
     articles: Iterable[Article],
     *,
@@ -44,11 +80,22 @@ def build_briefing(
     buckets: dict[Section, list[Article]] = {section: [] for section in SECTION_ORDER}
     selected_articles: list[Article] = []
     body_by_url = {body.article_url: body.body for body in article_bodies}
-    articles = tuple(articles)
+    representatives: list[Article] = []
+    for article in sorted(articles, key=_article_rank):
+        if not any(
+            are_same_articles(
+                article,
+                selected,
+                left_body=body_by_url.get(article.url, ""),
+                right_body=body_by_url.get(selected.url, ""),
+            )
+            for selected in representatives
+        ):
+            representatives.append(article)
 
     for section in SECTION_ORDER:
         candidates = sorted(
-            (article for article in articles if article.section == section),
+            (article for article in representatives if article.section == section),
             key=_article_rank,
         )
         for article in candidates:

@@ -22,6 +22,7 @@ COMPANY_ALIASES: Final[tuple[tuple[str, ...], ...]] = (
     ("한국항공우주", "한국항공우주산업", "Korea Aerospace Industries", "KAI"),
 )
 AMBIGUOUS_COMPANY_ALIASES: Final[tuple[str, ...]] = ("LIG",)
+SOLDIER_SERVICE_ALIASES: Final[tuple[str, ...]] = ("장병이음", "장병e음", "장병이(e)음")
 
 
 def contains_keyword(text: str, keyword: str) -> bool:

@@ -64,6 +64,12 @@ DIRECT_EXPORT_KEYWORDS: Final[tuple[str, ...]] = (
 EXPORT_TRANSACTION_KEYWORDS: Final[tuple[str, ...]] = (
     "수주",
     "납품",
+    "진출",
+    "공급",
+    "수주전",
+    "현지생산",
+    "현지 생산",
+    "현지화",
     "최종 인도",
     "인도 완료",
     "최종 납품",
@@ -90,6 +96,10 @@ FOREIGN_MARKET_KEYWORDS: Final[tuple[str, ...]] = (
     "태국",
     "말레이시아",
     "페루",
+    "멕시코",
+    "Mexico",
+    "중남미",
+    "중미",
 )
 
 EXPORT_BUSINESS_TREND_KEYWORDS: Final[tuple[str, ...]] = (
@@ -166,6 +176,48 @@ def is_defense_business_news(text: str) -> bool:
     )
 
 
+def is_defense_business_headline(title: str) -> bool:
+    """Recognize corporate actions, not background technology or policy terms."""
+    entry = _contains_any(title, DEFENSE_INDUSTRY_KEYWORDS) and _contains_any(
+        title,
+        ("진출", "뛰어든", "사업목적", "사업 목적", "컨트롤타워"),
+    )
+    ownership = (
+        _contains_any(title, DEFENSE_COMPANY_KEYWORDS)
+        and _contains_any(
+            title,
+            ("지분", "인수", "경영 참여", "경영참여"),
+        )
+        and is_defense_business_news(title)
+    )
+    aerospace_partnership = (
+        _contains_any(title, ("KAI", "한국항공우주"))
+        and _contains_any(title, FOREIGN_MARKET_KEYWORDS)
+        and _contains_any(
+            title,
+            (
+                "MOU",
+                "협약",
+                "공급망",
+                "기술협력",
+                "현지화",
+                "협력",
+                "진출",
+                "supply chain",
+                "local partners",
+            ),
+        )
+    )
+    commercialization = (
+        _contains_any(title, DEFENSE_COMPANY_KEYWORDS)
+        and is_defense_business_news(title)
+        and _contains_any(
+            title, ("사업 확대", "사업 확장", "사업화", "판매", "판다", "매출", "수익")
+        )
+    )
+    return entry or ownership or aerospace_partnership or commercialization
+
+
 def is_company_social_event(text: str) -> bool:
     """Return whether text describes a defense-company military family event."""
     company_context = _contains_any(
@@ -183,8 +235,14 @@ def contains_defense_anchor(text: str) -> bool:
 
 
 def _has_export_direction(text: str) -> bool:
+    delivery_action = bool(
+        re.search(
+            r"(?<![가-힣])인도(?=$|[\s·…,'\"“”]|를|할|한|하|했|됐|될|된)",
+            text,
+        )
+    )
     return _contains_any(text, DIRECT_EXPORT_KEYWORDS) or (
-        _contains_any(text, EXPORT_TRANSACTION_KEYWORDS)
+        (_contains_any(text, EXPORT_TRANSACTION_KEYWORDS) or delivery_action)
         and _contains_any(text, FOREIGN_MARKET_KEYWORDS)
     )
 
@@ -202,4 +260,9 @@ def is_foreign_procurement_news(title: str, text: str) -> bool:
         or _contains_any(text, DEFENSE_COMPANY_KEYWORDS)
         or _contains_any(text, ("한국 방산", "한국의 함정", "한국 함정", "K-방산"))
     )
-    return bool(purchaser) and korean_supply
+    korean_target = (
+        bool(matching_weapons(title))
+        or _contains_any(title, DEFENSE_COMPANY_KEYWORDS)
+        or _contains_any(title, ("한국", "韓", "K-방산"))
+    )
+    return bool(purchaser) and korean_supply and korean_target

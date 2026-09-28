@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import logging
 import os
 import sys
@@ -17,10 +16,22 @@ from dapa_morning_brief.article_content import (
     fetch_article_bodies,
 )
 from dapa_morning_brief.article_history import ArticleHistory
-from dapa_morning_brief.briefing import build_briefing, format_telegram_message
+from dapa_morning_brief.briefing import (
+    build_briefing,
+    build_candidate_pool,
+    format_telegram_message,
+)
 from dapa_morning_brief.candidate_validation import (
     BODY_DEDUP_CANDIDATE_MULTIPLIER,
     validated_candidates,
+)
+from dapa_morning_brief.cli_options import (
+    DEFAULT_DAYS,
+    DEFAULT_FALLBACK_DAYS,
+    BriefNamespace,
+)
+from dapa_morning_brief.cli_options import (
+    brief_parser as _parser,
 )
 from dapa_morning_brief.collector import collect_articles
 from dapa_morning_brief.copilot_summary import summarize_article_bodies
@@ -36,8 +47,8 @@ from dapa_morning_brief.weather import collect_weather_forecasts
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-DEFAULT_DAYS: Final = 1
-DEFAULT_FALLBACK_DAYS: Final = 2
+__all__ = ["DEFAULT_DAYS", "DEFAULT_FALLBACK_DAYS", "BriefNamespace", "main"]
+
 KST: Final[ZoneInfo] = ZoneInfo("Asia/Seoul")
 COPILOT_SUMMARY_TEMPLATE: Final = (
     "Copilot summary: generated={generated} fallback={fallback} bodies={bodies}\n"
@@ -46,21 +57,6 @@ PREPARED_BRIEF_TEMPLATE: Final = "Prepared brief saved: {path}\n"
 SELECTED_TEMPLATE: Final = (
     "Selected: section={section} count={count} below_minimum={below}\n"
 )
-
-
-class BriefNamespace(argparse.Namespace):
-    """Typed command-line argument values."""
-
-    days: int = DEFAULT_DAYS
-    fallback_days: int = DEFAULT_FALLBACK_DAYS
-    max_per_section: int = 5
-    include_google: bool = True
-    google_only: bool = False
-    dry_run: bool = False
-    telegram_token: str | None = None
-    telegram_chat_id: str | None = None
-    prepare_output: Path | None = None
-    prepared_input: Path | None = None
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -115,7 +111,7 @@ def _prepare_brief(
         ),
     )
     collected_articles = tuple(articles)
-    candidate_briefing = build_briefing(
+    candidate_briefing = build_candidate_pool(
         articles,
         max_per_section=max_per_section * BODY_DEDUP_CANDIDATE_MULTIPLIER,
     )
@@ -157,10 +153,9 @@ def _prepare_brief(
         )
         collected_articles += validated_fallback
         articles.extend(validated_fallback)
-        candidate_briefing = build_briefing(
+        candidate_briefing = build_candidate_pool(
             articles,
             max_per_section=max_per_section * BODY_DEDUP_CANDIDATE_MULTIPLIER,
-            article_bodies=article_bodies,
         )
         if generate_practice_points:
             article_bodies = fetch_article_bodies(
@@ -257,34 +252,6 @@ def _send_text(args: BriefNamespace, message: str) -> int:
         _ = sys.stderr.write(f"{error}\n")
         return 1
     return 0
-
-
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="dapa-morning-brief",
-        description="Collect DAPA-related news and send a Telegram morning brief.",
-    )
-    _ = parser.add_argument("--days", type=int, default=DEFAULT_DAYS)
-    _ = parser.add_argument(
-        "--fallback-days",
-        type=int,
-        default=DEFAULT_FALLBACK_DAYS,
-    )
-    _ = parser.add_argument(
-        "--max-per-section",
-        type=int,
-        choices=range(1, 6),
-        default=5,
-    )
-    _ = parser.add_argument("--include-google", action="store_true", default=True)
-    _ = parser.add_argument("--google-only", action="store_true")
-    _ = parser.add_argument("--dry-run", action="store_true")
-    _ = parser.add_argument("--telegram-token")
-    _ = parser.add_argument("--telegram-chat-id")
-    delivery = parser.add_mutually_exclusive_group()
-    _ = delivery.add_argument("--prepare-output", type=Path)
-    _ = delivery.add_argument("--prepared-input", type=Path)
-    return parser
 
 
 def _configure_stdio() -> None:

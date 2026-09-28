@@ -174,6 +174,22 @@ def test_production_brief_uses_actions_token_for_copilot() -> None:
     assert "GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}" not in production_job
 
 
+def test_production_and_preview_use_api_hub_credentials() -> None:
+    workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(
+        encoding="utf-8",
+    )
+    production_job = workflow.split("  scheduled-brief:\n", maxsplit=1)[1].split(
+        "  retry-failed-run:\n",
+        maxsplit=1,
+    )[0]
+    preview_job = workflow.split("  manual-preview:\n", maxsplit=1)[1]
+    for job in (production_job, preview_job):
+        assert "NAVER_CLIENT_ID: ${{ secrets.NAVER_API_HUB_CLIENT_ID }}" in job
+        assert "NAVER_CLIENT_SECRET: ${{ secrets.NAVER_API_HUB_CLIENT_SECRET }}" in job
+        assert "secrets.NAVER_CLIENT_ID" not in job
+        assert "secrets.NAVER_CLIENT_SECRET" not in job
+
+
 def test_copilot_smoke_test_calls_model_without_telegram_delivery() -> None:
     # Given
     workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(

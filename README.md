@@ -64,21 +64,31 @@ TELEGRAM_CHAT_ID=6015255978,-1004402722342
 
 ## 네이버 뉴스 API와 수집 기록
 
-네이버 개발자센터에 애플리케이션을 등록하고 사용 API에서 **검색**을 선택합니다.
+NAVER Cloud Platform의 **NAVER API HUB**에서 애플리케이션을 등록하고
+**NAVER 검색 → 뉴스**를 사용 설정합니다. API HUB에서 발급된 인증정보를 사용합니다.
 GitHub 저장소 Settings → Secrets and variables → Actions → Repository secrets에
 다음 두 값을 등록합니다. 키는 소스 코드나 로그에 넣지 않습니다.
 
-- `NAVER_CLIENT_ID`: Client ID
-- `NAVER_CLIENT_SECRET`: Client Secret
+- `NAVER_API_HUB_CLIENT_ID`: API HUB Client ID
+- `NAVER_API_HUB_CLIENT_SECRET`: API HUB Client Secret
+
+워크플로는 위 Secret을 실행환경의 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`으로
+전달합니다. 로컬에서도 이 두 환경변수 이름을 사용합니다. `.env.example`은
+설정 예시이며 프로그램이 `.env` 파일을 자동으로 읽지는 않습니다.
+기존 개발자센터용 GitHub Secret은 이전 실행과 분리하기 위해 유지합니다.
 
 두 값이 없으면 네이버를 건너뛰고 나머지 수집원을 사용하며 로그에 사유가 남습니다.
-네이버 요청은 공식 XML API, 최신순, 검색어별 최대 100건을 사용합니다.
+네이버 요청은 API HUB의 `/search/v1/news`에 `format=xml`을 지정하고,
+`X-NCP-APIGW-API-KEY-ID`와 `X-NCP-APIGW-API-KEY` 헤더로 인증합니다.
+개발자센터용 키와 API HUB 키는 혼용하지 않습니다.
+최신순, 검색어별 최대 100건을 사용합니다.
 네이버 요청은 최소 1초 간격으로 실행하고, 429 응답은 대기 후 최대 3회 시도합니다.
 제한이 지속되면 해당 수집 회차의 나머지 네이버 요청을 중단하고 다른 수집원을 사용합니다.
 검색 등록 시각이 원문 발행일과 다를 수 있어 Google과 네이버 모두 원문 날짜를 검증합니다.
 원문 날짜를 확인할 수 없는 기사는 제외하며 제외 사유를 로그에 남깁니다.
 
-- [네이버 공식 뉴스 검색 API 문서](https://developers.naver.com/docs/serviceapi/search/news/news.md)
+- [네이버 공식 뉴스 검색 API 문서](https://api.ncloud-docs.com/docs/naver-api-hub-search-news)
+- [NAVER API HUB 개요·인증·오류 코드](https://api.ncloud-docs.com/docs/naver-api-hub-overview)
 - [키워드·기업 별칭·무기체계 초기 등록부](docs/KEYWORD_CATALOG.md)
 
 운영 Actions는 `DAPA_HISTORY_PATH=.dapa-history/articles.json`을 지정하고

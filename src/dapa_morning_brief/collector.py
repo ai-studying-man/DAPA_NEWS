@@ -106,10 +106,11 @@ def collect_articles(
             for name, url, parser in BOARD_SOURCES
         )
         if os.getenv("NAVER_CLIENT_ID") and os.getenv("NAVER_CLIENT_SECRET"):
+            naver_url = f"{NAVER_NEWS_URL}?display=100&sort=date&format=xml"
             requests.extend(
                 _FeedRequest(
                     "naver",
-                    f"{NAVER_NEWS_URL}?query={quote_plus(query)}&display=100&sort=date",
+                    f"{naver_url}&query={quote_plus(query)}",
                     partial(parse_naver_items, days=days, now=now),
                     query,
                 )

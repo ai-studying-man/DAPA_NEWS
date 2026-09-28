@@ -4,6 +4,7 @@ from unittest.mock import patch
 import httpx
 
 from dapa_morning_brief import naver_rate_limit
+from dapa_morning_brief.naver_news import NAVER_NEWS_URL
 from dapa_morning_brief.naver_rate_limit import retry_delay
 
 
@@ -34,8 +35,8 @@ def test_retry_after_paces_retry_and_following_query() -> None:
     ):
         gate = naver_rate_limit.NaverRequestGate()
         # When
-        result = gate.get(client, "https://openapi.naver.com/v1/search/news.xml")
-        _ = gate.get(client, "https://openapi.naver.com/v1/search/news.xml")
+        result = gate.get(client, NAVER_NEWS_URL)
+        _ = gate.get(client, NAVER_NEWS_URL)
     # Then
     assert result.status_code == 200
     assert starts == [0.0, 3.0, 4.0]
@@ -65,9 +66,7 @@ def test_persistent_rate_limit_has_bounded_attempts_and_delay() -> None:
         ),
     ):
         # When
-        result = naver_rate_limit.NaverRequestGate().get(
-            client, "https://openapi.naver.com/v1/search/news.xml"
-        )
+        result = naver_rate_limit.NaverRequestGate().get(client, NAVER_NEWS_URL)
     # Then
     assert result.status_code == 429
     assert starts == [0.0, 30.0, 60.0]
@@ -91,9 +90,7 @@ def test_exhausted_gate_skips_remaining_queries() -> None:
         gate = naver_rate_limit.NaverRequestGate()
         # When
         for query in range(10):
-            _ = gate.get(
-                client, f"https://openapi.naver.com/v1/search/news.xml?q={query}"
-            )
+            _ = gate.get(client, f"{NAVER_NEWS_URL}?query={query}")
     # Then
     assert len(calls) == 3
 

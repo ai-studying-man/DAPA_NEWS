@@ -44,8 +44,8 @@ class NaverRequestGate:
                 response = client.get(
                     url,
                     headers={
-                        "X-Naver-Client-Id": os.environ["NAVER_CLIENT_ID"],
-                        "X-Naver-Client-Secret": os.environ["NAVER_CLIENT_SECRET"],
+                        "X-NCP-APIGW-API-KEY-ID": os.environ["NAVER_CLIENT_ID"],
+                        "X-NCP-APIGW-API-KEY": os.environ["NAVER_CLIENT_SECRET"],
                     },
                     follow_redirects=False,
                 )

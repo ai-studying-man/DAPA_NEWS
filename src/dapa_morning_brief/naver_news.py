@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
     from dapa_morning_brief.models import Article
 
-NAVER_NEWS_URL: Final = "https://openapi.naver.com/v1/search/news.xml"
+NAVER_NEWS_URL: Final = "https://naverapihub.apigw.ntruss.com/search/v1/news"
 
 
 def parse_naver_items(xml_text: str, *, days: int, now: datetime) -> list[Article]:

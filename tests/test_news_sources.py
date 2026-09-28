@@ -83,21 +83,31 @@ def test_naver_credentials_only_sent_to_naver_and_errors_redacted(
         _ = collector.collect_articles(days=1, include_google=True, only_google=False)
     # Then
     naver_requests = [
-        request for request in observed if request.url.host == "openapi.naver.com"
+        request
+        for request in observed
+        if request.url.host == "naverapihub.apigw.ntruss.com"
     ]
     assert naver_requests
     assert all(
-        request.headers.get("X-Naver-Client-Secret") == "secret-value"
+        request.headers.get("X-NCP-APIGW-API-KEY") == "secret-value"
         for request in naver_requests
     )
     assert all(
-        "X-Naver-Client-Secret" not in request.headers
+        "X-NCP-APIGW-API-KEY" not in request.headers
         for request in observed
-        if request.url.host != "openapi.naver.com"
+        if request.url.host != "naverapihub.apigw.ntruss.com"
     )
     assert "secret-value" not in caplog.text
     assert "status=401" in caplog.text
     assert all(request.url.params["sort"] == "date" for request in naver_requests)
+    assert all(request.url.params["format"] == "xml" for request in naver_requests)
+    assert all(request.url.path == "/search/v1/news" for request in naver_requests)
+    assert all(
+        request.headers.get("X-NCP-APIGW-API-KEY-ID") == "test-id"
+        and "X-Naver-Client-Id" not in request.headers
+        and "X-Naver-Client-Secret" not in request.headers
+        for request in naver_requests
+    )
     assert all(" OR " not in request.url.params["query"] for request in naver_requests)
 
 
@@ -152,7 +162,7 @@ def test_missing_credentials_skip_naver_and_google_disabled_is_respected(
         # When
         _ = collector.collect_articles(days=1, include_google=False, only_google=False)
     # Then
-    assert "openapi.naver.com" not in observed
+    assert "naverapihub.apigw.ntruss.com" not in observed
     assert "news.google.com" not in observed
     assert "reason=missing_credentials" in caplog.text
 
@@ -183,7 +193,7 @@ def test_naver_redirect_does_not_forward_credentials_to_another_host() -> None:
         _ = collector.collect_articles(days=1, include_google=False, only_google=False)
     # Then
     assert len(observed) == 1
-    assert observed[0].url.host == "openapi.naver.com"
+    assert observed[0].url.host == "naverapihub.apigw.ntruss.com"
 
 
 @pytest.fixture(autouse=True)

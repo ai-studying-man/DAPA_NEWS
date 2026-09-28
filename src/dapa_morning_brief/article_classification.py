@@ -52,6 +52,7 @@ from dapa_morning_brief.topic_boundaries import (
     has_unrelated_foreign_subject,
     is_defense_public_action,
     is_incidental_civic_agenda,
+    is_military_equipment_overview,
     is_opinion_headline,
     is_overseas_delivery,
     is_overseas_weapon_use,
@@ -90,6 +91,10 @@ def classify_title(
     )
     if service_policy or has_acquisition_accountability_topic(title, description):
         return Section.POLICY
+    if is_military_equipment_overview(title) and not (
+        has_acquisition_policy_topic(title) or is_public_procurement_headline(title)
+    ):
+        return Section.WEAPON_SYSTEM
     if (
         is_overseas_delivery(title, description)
         or is_overseas_weapon_use(title)

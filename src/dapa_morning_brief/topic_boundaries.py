@@ -119,6 +119,21 @@ def is_defense_public_action(title: str) -> bool:
     return actor and action
 
 
+def is_military_equipment_overview(title: str) -> bool:
+    """Require military-led equipment explainers, not incidental industry context."""
+    military_lead = re.match(
+        r"^(?:\[[^\]]+\]\s*)*(?:軍|군|우리\s*군|국군|육군|해군|공군)(?=$|[\s,·은는이가])",
+        title.strip(),
+    )
+    return (
+        military_lead is not None
+        and contains_any(title, ("장비", "무기", "전력", "전차", "지뢰"))
+        and contains_any(
+            title, ("뭐가", "어떤", "제원", "성능은", "종류", "살펴", "알아")
+        )
+    )
+
+
 def is_overseas_delivery(title: str, description: str) -> bool:
     """Use snippets to disambiguate weapons only when the title describes shipment."""
     return (

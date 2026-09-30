@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
 from typing import TYPE_CHECKING, Final
 
+from dapa_morning_brief.article_exclusions import fiction_exclusion_reason
 from dapa_morning_brief.article_history import canonical_url
 from dapa_morning_brief.models import Article, Briefing, Section
 from dapa_morning_brief.selection_rules import (
@@ -50,6 +52,7 @@ SOURCE_PRIORITY: Final[tuple[str, ...]] = (
     "네이버",
     "Google",
 )
+_LOGGER = logging.getLogger(__name__)
 
 
 def build_candidate_pool(
@@ -104,7 +107,7 @@ def build_briefing(
     for candidate in sorted(articles, key=_article_rank):
         article = candidate
         body = body_by_url.get(article.url, "")
-        if body and is_incidental_civic_agenda(article.title, body):
+        if _is_editorially_excluded(article, body):
             continue
         if body and (
             is_overseas_delivery(article.title, body)
@@ -236,3 +239,16 @@ def _reserve_agency_article(
 def _is_agency_article(article: Article) -> bool:
     metadata = f"{article.title} {article.description} {article.source}".casefold()
     return any(keyword.casefold() in metadata for keyword in AGENCY_KEYWORDS)
+
+
+def _is_editorially_excluded(article: Article, body: str) -> bool:
+    reason = fiction_exclusion_reason(article, body)
+    if reason is not None:
+        _LOGGER.warning(
+            "news_candidate_excluded reason=%s section=%s title=%s",
+            reason,
+            article.section.value,
+            article.title,
+        )
+        return True
+    return bool(body) and is_incidental_civic_agenda(article.title, body)

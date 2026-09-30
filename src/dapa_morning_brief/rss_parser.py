@@ -13,6 +13,7 @@ from dapa_morning_brief.article_classification import (
     is_relevant_article,
     is_relevant_title,
 )
+from dapa_morning_brief.article_exclusions import is_excluded_publisher
 from dapa_morning_brief.models import Article, Section
 from dapa_morning_brief.rss_metadata import (
     _clean_description,
@@ -77,6 +78,9 @@ def parse_rss_items(
         published_at = _parse_date(_text(item, "pubDate"))
         if not title or not link or published_at is None:
             _trace_decision("missing_metadata", title, published_at)
+            continue
+        if is_excluded_publisher(source=source, url=link):
+            _trace_decision("excluded_publisher", title, published_at)
             continue
         if published_at < cutoff:
             _trace_decision("stale", title, published_at)

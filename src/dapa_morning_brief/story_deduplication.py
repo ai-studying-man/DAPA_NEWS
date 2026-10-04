@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
+from dapa_morning_brief.appointment_evidence import compare_appointment_leads
 from dapa_morning_brief.article_history import canonical_url
 from dapa_morning_brief.body_similarity import has_substantial_body, have_similar_bodies
 from dapa_morning_brief.entity_catalog import (
@@ -168,9 +169,19 @@ def are_same_articles(
         or abs(left.published_at - right.published_at) > timedelta(days=2)
     ):
         return False
-    if have_conflicting_quantities(left.title, right.title):
-        return bool(
-            left_body and right_body and have_similar_bodies(left_body, right_body)
+    appointment = compare_appointment_leads(
+        left.title,
+        right.title,
+        left_body or left.description,
+        right_body or right.description,
+    )
+    if appointment is not None or have_conflicting_quantities(left.title, right.title):
+        return (
+            appointment
+            if appointment is not None
+            else bool(
+                left_body and right_body and have_similar_bodies(left_body, right_body)
+            )
         )
     if have_near_identical_headlines(left.title, right.title):
         return True

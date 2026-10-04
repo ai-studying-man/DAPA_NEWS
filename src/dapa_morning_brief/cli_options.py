@@ -4,8 +4,10 @@ import argparse
 from pathlib import Path
 from typing import Final
 
+from dapa_morning_brief.models import MAX_ARTICLES_PER_SECTION, MIN_ARTICLES_PER_SECTION
+
 DEFAULT_DAYS: Final = 1
-DEFAULT_FALLBACK_DAYS: Final = 2
+DEFAULT_FALLBACK_DAYS: Final = 5
 
 
 class BriefNamespace(argparse.Namespace):
@@ -29,10 +31,17 @@ def brief_parser() -> argparse.ArgumentParser:
         prog="dapa-morning-brief",
         description="Collect DAPA-related news and send a Telegram morning brief.",
     )
-    _ = parser.add_argument("--days", type=int, default=DEFAULT_DAYS)
-    _ = parser.add_argument("--fallback-days", type=int, default=DEFAULT_FALLBACK_DAYS)
     _ = parser.add_argument(
-        "--max-per-section", type=int, choices=range(1, 6), default=5
+        "--days", type=int, choices=range(1, 6), default=DEFAULT_DAYS
+    )
+    _ = parser.add_argument(
+        "--fallback-days", type=int, choices=range(1, 6), default=DEFAULT_FALLBACK_DAYS
+    )
+    _ = parser.add_argument(
+        "--max-per-section",
+        type=int,
+        choices=range(MIN_ARTICLES_PER_SECTION, MAX_ARTICLES_PER_SECTION + 1),
+        default=5,
     )
     _ = parser.add_argument("--include-google", action="store_true", default=True)
     _ = parser.add_argument("--google-only", action="store_true")

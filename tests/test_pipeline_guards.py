@@ -12,6 +12,7 @@ from dapa_morning_brief.briefing import build_briefing
 from dapa_morning_brief.cli import KST, main
 from dapa_morning_brief.models import Article, Section
 from dapa_morning_brief.story_deduplication import are_same_story
+from tests.coverage_samples import coverage_articles
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -73,7 +74,23 @@ def test_preparation_excludes_prior_collected_article_and_persists_new(
     brief_path = tmp_path / "brief.json"
     with (
         patch.dict(os.environ, {"DAPA_HISTORY_PATH": str(path)}),
-        patch("dapa_morning_brief.cli.collect_articles", return_value=[prior, fresh]),
+        patch(
+            "dapa_morning_brief.cli.collect_articles",
+            return_value=[
+                prior,
+                fresh,
+                *[
+                    a
+                    for a in coverage_articles(3)
+                    if a.section != Section.WEAPON_SYSTEM
+                ],
+                *[
+                    a
+                    for a in coverage_articles(2)
+                    if a.section == Section.WEAPON_SYSTEM
+                ],
+            ],
+        ),
         patch("dapa_morning_brief.cli.fetch_article_bodies", return_value=()),
         patch("dapa_morning_brief.cli.collect_weather_forecasts", return_value=()),
         patch("dapa_morning_brief.cli.summarize_article_bodies", return_value=()),
@@ -82,14 +99,14 @@ def test_preparation_excludes_prior_collected_article_and_persists_new(
     rendered = brief_path.read_text(encoding="utf-8")
     assert prior.url not in rendered
     assert fresh.url in rendered
-    assert len(ArticleHistory.load(path).entries) == 2
+    assert len(ArticleHistory.load(path).entries) == 13
     before = path.read_bytes()
     with (
         patch.dict(os.environ, {"DAPA_HISTORY_PATH": str(path)}),
         patch("dapa_morning_brief.cli.collect_articles", return_value=[fresh]),
         patch("dapa_morning_brief.cli.collect_weather_forecasts", return_value=()),
     ):
-        assert main(["--dry-run"]) == 0
+        assert main(["--dry-run"]) == 3
     assert path.read_bytes() == before
 
 

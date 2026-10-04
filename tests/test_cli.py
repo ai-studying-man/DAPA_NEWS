@@ -15,6 +15,7 @@ from dapa_morning_brief.models import (
     Section,
     WeatherForecast,
 )
+from tests.coverage_samples import coverage_articles
 
 
 class CliTest(TestCase):
@@ -42,14 +43,14 @@ class CliTest(TestCase):
             exit_code = main(["--dry-run"])
 
         # Then
-        assert exit_code == 0
+        assert exit_code == 3
         assert collect.call_args.kwargs["as_of"] == datetime.now(KST).date()
         assert "1. 과천시 : 맑음 / 21℃ ~ 31℃" in output.getvalue()
 
     def test_cli_defaults_to_daily_freshness_window(self) -> None:
         # Given
         daily_window_days = 1
-        fallback_window_days = 2
+        fallback_window_days = 5
 
         # When
         configured_days = DEFAULT_DAYS
@@ -68,13 +69,6 @@ class CliTest(TestCase):
             source="뉴스",
             section=Section.POLICY,
         )
-        fallback_government = Article(
-            title="이 대통령 주재 국무회의 주요 안건 의결",
-            url="https://example.com/government",
-            published_at=published,
-            source="뉴스",
-            section=Section.GOVERNMENT,
-        )
         fallback_policy = Article(
             title="이틀 전 방위사업청 정책 기사",
             url="https://example.com/old-policy",
@@ -88,8 +82,16 @@ class CliTest(TestCase):
             patch(
                 "dapa_morning_brief.cli.collect_articles",
                 side_effect=[
-                    [daily_policy],
-                    [fallback_government, fallback_policy],
+                    [a for a in coverage_articles(3) if a.section != Section.POLICY]
+                    + [daily_policy],
+                    [
+                        fallback_policy,
+                        *[
+                            a
+                            for a in coverage_articles(3)
+                            if a.section == Section.POLICY
+                        ],
+                    ],
                 ],
             ) as collect,
             patch(
@@ -103,13 +105,16 @@ class CliTest(TestCase):
         assert exit_code == 0
         assert collect.call_count == 2
         assert daily_policy.title in output.getvalue()
-        assert fallback_government.title in output.getvalue()
+        assert coverage_articles(3)[0].title in output.getvalue()
         assert fallback_policy.title not in output.getvalue()
 
     def test_cli_allows_five_articles_per_section(self) -> None:
         output = StringIO()
         with (
-            patch("dapa_morning_brief.cli.collect_articles", return_value=[]),
+            patch(
+                "dapa_morning_brief.cli.collect_articles",
+                return_value=coverage_articles(),
+            ),
             patch(
                 "dapa_morning_brief.cli.collect_weather_forecasts",
                 return_value=(),
@@ -149,7 +154,22 @@ class CliTest(TestCase):
 
         # When
         with (
-            patch("dapa_morning_brief.cli.collect_articles", return_value=[article]),
+            patch(
+                "dapa_morning_brief.cli.collect_articles",
+                return_value=[
+                    article,
+                    *[
+                        a
+                        for a in coverage_articles(3)
+                        if a.section != Section.WEAPON_SYSTEM
+                    ],
+                    *[
+                        a
+                        for a in coverage_articles(2)
+                        if a.section == Section.WEAPON_SYSTEM
+                    ],
+                ],
+            ),
             patch(
                 "dapa_morning_brief.cli.collect_weather_forecasts",
                 return_value=(),
@@ -173,7 +193,7 @@ class CliTest(TestCase):
         assert exit_code == 0
         assert generated.text in send.call_args.kwargs["text"]
         assert (
-            "Copilot summary: generated=1 fallback=0 bodies=1\n"
+            "Copilot summary: generated=1 fallback=8 bodies=1\n"
             in diagnostic_output.getvalue()
         )
 
@@ -193,5 +213,12 @@ class CliTest(TestCase):
             exit_code = main(["--dry-run"])
 
         # Then
-        assert exit_code == 0
+        assert exit_code == 3
         assert "보도자료" not in output.getvalue()
+
+
+@pytest.mark.parametrize("limit", [1, 2])
+def test_cli_rejects_limits_below_three(limit: int) -> None:
+    with pytest.raises(SystemExit) as raised:
+        _ = main(["--dry-run", "--max-per-section", str(limit)])
+    assert raised.value.code == 2

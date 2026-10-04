@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime
 from io import StringIO
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
+import pytest
+from pydantic import ValidationError
+
 from dapa_morning_brief.cli import KST, main
 from dapa_morning_brief.copilot_summary import ArticleBody
 from dapa_morning_brief.models import Article, PracticePoint, Section
 from dapa_morning_brief.prepared_brief import PreparedBrief
+from tests.coverage_samples import coverage_articles
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -18,6 +23,7 @@ def test_prepared_brief_round_trips_only_delivery_data(tmp_path: Path) -> None:
     # Given
     path = tmp_path / "prepared-brief.json"
     prepared = PreparedBrief(
+        section_counts=(3, 3, 3, 3),
         briefing_date=date(2026, 8, 8),
         message="prepared telegram message",
         generated_practice_points=12,
@@ -56,7 +62,22 @@ def test_cli_prepares_json_without_sending_telegram(tmp_path: Path) -> None:
 
     # When
     with (
-        patch("dapa_morning_brief.cli.collect_articles", return_value=[article]),
+        patch(
+            "dapa_morning_brief.cli.collect_articles",
+            return_value=[
+                article,
+                *[
+                    a
+                    for a in coverage_articles(3)
+                    if a.section != Section.WEAPON_SYSTEM
+                ],
+                *[
+                    a
+                    for a in coverage_articles(2)
+                    if a.section == Section.WEAPON_SYSTEM
+                ],
+            ],
+        ),
         patch(
             "dapa_morning_brief.cli.collect_weather_forecasts",
             return_value=(),
@@ -82,6 +103,7 @@ def test_cli_sends_prepared_json_without_collecting_again(tmp_path: Path) -> Non
     # Given
     input_path = tmp_path / "prepared.json"
     prepared = PreparedBrief(
+        section_counts=(3, 3, 3, 3),
         briefing_date=datetime.now(KST).date(),
         message="already prepared telegram message",
         generated_practice_points=1,
@@ -115,6 +137,7 @@ def test_cli_dry_runs_prepared_json_without_telegram(tmp_path: Path) -> None:
     # Given
     input_path = tmp_path / "prepared.json"
     prepared = PreparedBrief(
+        section_counts=(3, 3, 3, 3),
         briefing_date=datetime.now(KST).date(),
         message="already prepared telegram message",
         generated_practice_points=1,
@@ -134,3 +157,36 @@ def test_cli_dry_runs_prepared_json_without_telegram(tmp_path: Path) -> None:
     assert exit_code == 0
     assert output.getvalue() == f"{prepared.message}\n"
     send.assert_not_called()
+
+
+def test_incomplete_prepared_payload_cannot_bypass_send_minimum(tmp_path: Path) -> None:
+    path = tmp_path / "incomplete.json"
+    PreparedBrief(
+        briefing_date=datetime.now(KST).date(),
+        section_counts=(3, 1, 5, 5),
+        message="incomplete diagnostic preview",
+        generated_practice_points=0,
+        fallback_practice_points=0,
+    ).save(path)
+    with (
+        patch("dapa_morning_brief.cli.send_telegram_messages") as send,
+        patch("dapa_morning_brief.cli.collect_articles") as collect,
+    ):
+        assert main(["--prepared-input", str(path)]) == 3
+    send.assert_not_called()
+    collect.assert_not_called()
+
+
+@pytest.mark.parametrize("counts", [(3, 3, 3), (3, 3, 3, 3, 3), (3, 3, 6, 3)])
+def test_invalid_prepared_category_counts_are_rejected(counts: tuple[int, ...]) -> None:
+    payload = json.dumps(
+        {
+            "briefing_date": "2026-10-04",
+            "section_counts": counts,
+            "message": "test",
+            "generated_practice_points": 0,
+            "fallback_practice_points": 0,
+        }
+    )
+    with pytest.raises(ValidationError):
+        _ = PreparedBrief.model_validate_json(payload)

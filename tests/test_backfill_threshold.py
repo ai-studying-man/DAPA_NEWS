@@ -6,6 +6,7 @@ import pytest
 
 from dapa_morning_brief.cli import main
 from dapa_morning_brief.models import Article, Section
+from tests.coverage_samples import coverage_articles
 
 
 @pytest.mark.parametrize("count", [0, 1, 2, 3, 5])
@@ -61,13 +62,28 @@ def test_backfill_when_section_has_fewer_than_three(count: int, copies: int) -> 
     with (
         patch(
             "dapa_morning_brief.cli.collect_articles",
-            side_effect=[daily * copies, [fallback]],
+            side_effect=[
+                daily * copies,
+                [
+                    fallback,
+                    *[a for a in coverage_articles() if a.section == Section.POLICY][
+                        3 : 3 + max(0, 2 - count)
+                    ],
+                ],
+            ],
         ) as collect,
         patch("dapa_morning_brief.cli.collect_weather_forecasts", return_value=()),
         patch("sys.stdout", output),
     ):
         result = main(["--dry-run"])
     # Then: the boundary is three, and supplementary content reaches the output.
+    for section in Section:
+        selected = [
+            a
+            for a in [*daily, fallback, *coverage_articles()]
+            if a.section == section and a.url in output.getvalue()
+        ]
+        assert 3 <= len({a.url for a in selected}) <= 5
     assert result == 0
     assert collect.call_count == (2 if count < 3 else 1)
     assert (fallback.url in output.getvalue()) == (count < 3)

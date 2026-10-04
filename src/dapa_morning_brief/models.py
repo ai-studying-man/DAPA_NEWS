@@ -10,6 +10,10 @@ if TYPE_CHECKING:
     from datetime import date, datetime
 
 
+MIN_ARTICLES_PER_SECTION: Final = 3
+MAX_ARTICLES_PER_SECTION: Final = 5
+
+
 class Section(StrEnum):
     """Newsletter section."""
 

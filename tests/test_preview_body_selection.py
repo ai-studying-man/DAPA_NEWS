@@ -45,7 +45,7 @@ def test_dry_run_deduplicates_bodies_without_summarizing_or_sending(
     ):
         result = main(["--dry-run", "--fallback-days", "1"])
     # Then
-    assert result == 0
+    assert result == 3
     assert sum(a.url in output.getvalue() for a in articles) == 1
     summarize.assert_not_called()
     send.assert_not_called()

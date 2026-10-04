@@ -17,14 +17,10 @@ from dapa_morning_brief.article_content import (
 )
 from dapa_morning_brief.article_history import ArticleHistory
 from dapa_morning_brief.briefing import (
-    build_briefing,
-    build_candidate_pool,
     format_telegram_message,
 )
 from dapa_morning_brief.candidate_validation import (
-    BODY_DEDUP_CANDIDATE_MULTIPLIER,
     trace_candidates,
-    validated_candidates,
 )
 from dapa_morning_brief.cli_options import (
     DEFAULT_DAYS,
@@ -36,8 +32,16 @@ from dapa_morning_brief.cli_options import (
 )
 from dapa_morning_brief.collector import collect_articles
 from dapa_morning_brief.copilot_summary import summarize_article_bodies
-from dapa_morning_brief.models import PRACTICE_POINT_SECTIONS, Section
+from dapa_morning_brief.models import (
+    MIN_ARTICLES_PER_SECTION,
+    PRACTICE_POINT_SECTIONS,
+    Section,
+)
 from dapa_morning_brief.prepared_brief import PreparedBrief
+from dapa_morning_brief.selection_pipeline import (
+    CandidateSelection,
+    InsufficientCoverageError,
+)
 from dapa_morning_brief.telegram import (
     TelegramSendError,
     parse_chat_ids,
@@ -83,7 +87,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.dry_run:
         _ = sys.stdout.write(f"{prepared.message}\n")
-        return 0
+        return 0 if prepared.has_minimum_coverage else 3
     return _send_text(args, prepared.message)
 
 
@@ -98,71 +102,34 @@ def _prepare_brief(
     history = ArticleHistory.load(history_path) if history_path else ArticleHistory()
     days = args.days
     max_per_section = args.max_per_section
-    articles = collect_articles(
-        days=days,
-        include_google=args.include_google,
-        only_google=args.google_only,
-    )
-    trace_candidates("collected", articles)
-    articles = list(
-        validated_candidates(
-            history.exclude_recent(articles, today=today),
-            today=today,
-            max_age_days=days,
-            max_per_section=max_per_section,
-        ),
-    )
-    collected_articles = tuple(articles)
-    trace_candidates("validated", articles)
-    candidate_briefing = build_candidate_pool(
-        articles,
-        max_per_section=max_per_section * BODY_DEDUP_CANDIDATE_MULTIPLIER,
-    )
-    candidate_articles = tuple(
-        chain.from_iterable(candidate_briefing.sections.values()),
-    )
-    article_bodies = fetch_article_bodies(candidate_briefing, include_government=True)
-    briefing = build_briefing(
-        candidate_articles,
-        max_per_section=max_per_section,
-        article_bodies=article_bodies,
-    )
-    missing_sections = {
-        section
-        for section in Section
-        if len(briefing.sections[section]) < min(3, max_per_section)
-    }
-    if missing_sections and args.fallback_days > days:
-        fallback_articles = collect_articles(
-            days=args.fallback_days,
-            include_google=True,
-            only_google=False,
+    selection = CandidateSelection(today, max_per_section, fetch_article_bodies)
+    for window_days in range(days, max(days, args.fallback_days) + 1):
+        missing_sections = {
+            section
+            for section in Section
+            if len(selection.briefing.sections[section]) < MIN_ARTICLES_PER_SECTION
+        }
+        if not missing_sections:
+            break
+        initial = window_days == days
+        if not initial:
+            logging.getLogger(__name__).warning(
+                "news_backfill days=%d missing_sections=%s",
+                window_days,
+                ",".join(sorted(s.value for s in missing_sections)),
+            )
+        candidates = collect_articles(
+            days=window_days,
+            include_google=args.include_google if initial else True,
+            only_google=args.google_only if initial else False,
         )
-        trace_candidates("fallback_collected", fallback_articles)
-        validated_fallback = validated_candidates(
-            (
-                article
-                for article in history.exclude_recent(fallback_articles, today=today)
-                if article.section in missing_sections
-            ),
-            today=today,
-            max_age_days=args.fallback_days,
-            max_per_section=max_per_section,
+        trace_candidates("collected" if initial else "fallback_collected", candidates)
+        selection.inspect(
+            history.exclude_recent(candidates, today=today),
+            days=window_days,
         )
-        collected_articles += validated_fallback
-        articles.extend(validated_fallback)
-        candidate_briefing = build_candidate_pool(
-            articles,
-            max_per_section=max_per_section * BODY_DEDUP_CANDIDATE_MULTIPLIER,
-        )
-        article_bodies = fetch_article_bodies(
-            candidate_briefing, include_government=True
-        )
-        briefing = build_briefing(
-            tuple(chain.from_iterable(candidate_briefing.sections.values())),
-            max_per_section=max_per_section,
-            article_bodies=article_bodies,
-        )
+    briefing = selection.briefing
+    article_bodies = selection.bodies
     trace_candidates("selected", chain.from_iterable(briefing.sections.values()))
     for section in Section:
         count = len(briefing.sections[section])
@@ -170,12 +137,19 @@ def _prepare_brief(
             SELECTED_TEMPLATE.format(
                 section=section.value,
                 count=count,
-                below=count < min(3, max_per_section),
+                below=count < MIN_ARTICLES_PER_SECTION,
             ),
         )
     if not any(briefing.sections.values()) and not args.dry_run:
         message = "No validated news remains; refusing an empty Telegram brief."
         raise RuntimeError(message)
+    shortages = tuple(
+        (section, len(briefing.sections[section]))
+        for section in Section
+        if len(briefing.sections[section]) < MIN_ARTICLES_PER_SECTION
+    )
+    if shortages and not args.dry_run:
+        raise InsufficientCoverageError(shortages)
     weather_forecasts = collect_weather_forecasts(as_of=today)
     practice_points = ()
     selected_count = sum(
@@ -206,6 +180,12 @@ def _prepare_brief(
     )
     prepared = PreparedBrief(
         briefing_date=today,
+        section_counts=(
+            len(briefing.sections[Section.GOVERNMENT]),
+            len(briefing.sections[Section.POLICY]),
+            len(briefing.sections[Section.WEAPON_SYSTEM]),
+            len(briefing.sections[Section.EXPORT_BUSINESS]),
+        ),
         message=message,
         generated_practice_points=len(practice_points),
         fallback_practice_points=(
@@ -213,7 +193,11 @@ def _prepare_brief(
         ),
     )
     if history_path is not None and not args.dry_run:
-        history.record(collected_articles, today=today).save(history_path)
+        history.record(
+            chain.from_iterable(briefing.sections.values()), today=today
+        ).save(
+            history_path,
+        )
     return prepared
 
 
@@ -226,7 +210,10 @@ def _send_prepared(args: BriefNamespace, *, today: date, path: Path) -> int:
         return 2
     if args.dry_run:
         _ = sys.stdout.write(f"{prepared.message}\n")
-        return 0
+        return 0 if prepared.has_minimum_coverage else 3
+    if not prepared.has_minimum_coverage:
+        _ = sys.stderr.write("Prepared brief has a category below minimum=3.\n")
+        return 3
     return _send_text(args, prepared.message)
 
 

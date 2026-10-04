@@ -271,3 +271,11 @@ def test_workflow_enables_item_level_news_diagnostics() -> None:
     ]
     # Then
     assert 'DAPA_NEWS_TRACE: "1"' in environment
+
+
+def test_production_and_preview_allow_five_day_backfill() -> None:
+    workflow = Path(".github/workflows/dapa-morning-brief.yml").read_text(
+        encoding="utf-8"
+    )
+    assert workflow.count("--days 1 --fallback-days 5") == 2
+    assert "--fallback-days 2" not in workflow

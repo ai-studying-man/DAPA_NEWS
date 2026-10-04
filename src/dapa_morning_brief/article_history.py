@@ -1,4 +1,4 @@
-"""Persist recent collection identities without storing article bodies."""
+"""Persist final selection identities without storing article bodies."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ class HistoryEntry(BaseModel):
 
 
 class ArticleHistory(BaseModel):
-    """A bounded collection ledger; same-day retries remain possible."""
+    """A bounded final-selection ledger; same-day retries remain possible."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True, extra="forbid")
 

@@ -186,7 +186,7 @@ jobs:
           rm -f .dapa-prepared/morning-brief.json
           timeout --foreground 1200s \
             uv run python -m dapa_morning_brief.cli \
-            --days 1 --fallback-days 2 \
+            --days 1 --fallback-days 5 \
             --prepare-output .dapa-prepared/morning-brief.json
           test -s .dapa-prepared/morning-brief.json
           completed_epoch=$(TZ=Asia/Seoul date +%s)
@@ -382,7 +382,7 @@ jobs:
       - name: Prepare AI-powered morning brief without Telegram
         run: >-
           uv run python -m dapa_morning_brief.cli
-          --days 1 --fallback-days 2
+          --days 1 --fallback-days 5
           --prepare-output .dapa-preview/morning-brief.json
       - name: Preview prepared morning brief without Telegram
         run: >-

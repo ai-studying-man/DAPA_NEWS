@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 from datetime import date  # noqa: TC003 - Pydantic resolves this field at runtime.
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from dapa_morning_brief.models import MAX_ARTICLES_PER_SECTION, MIN_ARTICLES_PER_SECTION
+
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+ArticleCount = Annotated[int, Field(ge=0, le=MAX_ARTICLES_PER_SECTION)]
 
 
 class PreparedBrief(BaseModel):
@@ -17,9 +22,15 @@ class PreparedBrief(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True, extra="forbid")
 
     briefing_date: date
+    section_counts: tuple[ArticleCount, ArticleCount, ArticleCount, ArticleCount]
     message: str = Field(min_length=1)
     generated_practice_points: int = Field(ge=0)
     fallback_practice_points: int = Field(ge=0)
+
+    @property
+    def has_minimum_coverage(self) -> bool:
+        """Verify all four category counts before accepting a delivery payload."""
+        return all(count >= MIN_ARTICLES_PER_SECTION for count in self.section_counts)
 
     @classmethod
     def load(cls, path: Path) -> PreparedBrief:

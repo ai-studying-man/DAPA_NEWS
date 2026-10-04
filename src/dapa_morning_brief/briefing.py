@@ -63,6 +63,8 @@ def build_candidate_pool(
     urls: set[str] = set()
     titles: set[str] = set()
     for article in sorted(articles, key=_article_rank):
+        if _is_editorially_excluded(article, ""):
+            continue
         url, title = canonical_url(article.url), normalize_title(article.title)
         if url in urls or title in titles:
             continue

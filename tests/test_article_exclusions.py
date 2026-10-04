@@ -120,7 +120,7 @@ def test_fiction_candidate_is_removed_before_section_quota_is_filled(
 ) -> None:
     fictional = Article(
         title="국방부 차관의 선택",
-        url="https://publisher.example/fiction",
+        url="https://publisher.example/story",
         published_at=datetime(2026, 9, 30, 8, tzinfo=UTC),
         source="테스트뉴스",
         section=Section.GOVERNMENT,

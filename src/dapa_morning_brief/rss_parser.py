@@ -13,7 +13,10 @@ from dapa_morning_brief.article_classification import (
     is_relevant_article,
     is_relevant_title,
 )
-from dapa_morning_brief.article_exclusions import is_excluded_publisher
+from dapa_morning_brief.article_exclusions import (
+    fiction_exclusion_reason,
+    is_excluded_publisher,
+)
 from dapa_morning_brief.models import Article, Section
 from dapa_morning_brief.rss_metadata import (
     _clean_description,
@@ -104,18 +107,21 @@ def parse_rss_items(
         if section is None:
             _trace_decision("unclassified", title, published_at)
             continue
-        articles.append(
-            Article(
-                title=_clean_title(title, source=source),
-                url=link,
-                published_at=published_at,
-                source=source,
-                section=section,
-                description=description,
-                view_count=_view_count_from_item(item),
-                feed_rank=feed_rank,
-            ),
+        article = Article(
+            title=_clean_title(title, source=source),
+            url=link,
+            published_at=published_at,
+            source=source,
+            section=section,
+            description=description,
+            view_count=_view_count_from_item(item),
+            feed_rank=feed_rank,
         )
+        exclusion_reason = fiction_exclusion_reason(article, "")
+        if exclusion_reason is not None:
+            _trace_decision(exclusion_reason, title, published_at)
+            continue
+        articles.append(article)
         _trace_decision("accepted", title, published_at)
 
     return articles

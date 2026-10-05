@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from dapa_morning_brief.copilot_summary import ArticleBody
 from dapa_morning_brief.models import PRACTICE_POINT_SECTIONS
+from dapa_morning_brief.opinion_evidence import publisher_opinion_reason
 from dapa_morning_brief.source_config import USER_AGENT
 from dapa_morning_brief.structured_article import extract_structured_article
 
@@ -238,11 +239,13 @@ def _fetch_article_body(client: httpx.Client, article: Article) -> ArticleBody |
     except httpx.HTTPError:
         return None
     body = extract_main_text(response.text)
-    if body is None:
+    reason = publisher_opinion_reason(response.text)
+    if body is None and reason is None:
         return None
     return ArticleBody(
         article_url=article.url,
         title=article.title,
         source=article.source,
-        body=body,
+        body=body or "",
+        exclusion_reason=reason,
     )

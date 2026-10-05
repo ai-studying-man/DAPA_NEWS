@@ -36,6 +36,7 @@ class ArticleBody:
     title: str
     source: str
     body: str
+    exclusion_reason: str | None = None
 
 
 class _CopilotPoint(BaseModel):

@@ -104,12 +104,14 @@ def build_briefing(
     """Select newest non-duplicate articles for each section."""
     buckets: dict[Section, list[Article]] = {section: [] for section in SECTION_ORDER}
     selected_articles: list[Article] = []
-    body_by_url = {body.article_url: body.body for body in article_bodies}
+    inspected = tuple(article_bodies)
+    excluded_urls = {body.article_url for body in inspected if body.exclusion_reason}
+    body_by_url = {body.article_url: body.body for body in inspected}
     representatives: list[Article] = []
     for candidate in sorted(articles, key=_article_rank):
         article = candidate
         body = body_by_url.get(article.url, "")
-        if _is_editorially_excluded(article, body):
+        if article.url in excluded_urls or _is_editorially_excluded(article, body):
             continue
         if body and (
             is_overseas_delivery(article.title, body)

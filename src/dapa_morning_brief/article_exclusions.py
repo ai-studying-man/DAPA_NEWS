@@ -6,6 +6,8 @@ import re
 from typing import TYPE_CHECKING, Final
 from urllib.parse import unquote, urlsplit
 
+from dapa_morning_brief.opinion_evidence import author_opinion_reason
+
 if TYPE_CHECKING:
     from dapa_morning_brief.models import Article
 
@@ -126,4 +128,4 @@ def fiction_exclusion_reason(article: Article, body: str) -> str | None:
             return "personal_opinion"
     if body and (_NON_NEWS_LABEL.match(body.lstrip()) or _NON_NEWS_PREFIX.match(body)):
         return "non_news_header"
-    return None
+    return author_opinion_reason(f"{article.description} {body}")

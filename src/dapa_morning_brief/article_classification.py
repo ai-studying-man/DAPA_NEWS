@@ -26,6 +26,11 @@ from dapa_morning_brief.government_rules import (
     GENERAL_GOVERNMENT_POLICY_KEYWORDS,
     current_government_actor,
 )
+from dapa_morning_brief.headline_action_rules import (
+    is_defense_market_outreach,
+    is_domestic_support_contract,
+    is_soldier_service_procurement,
+)
 from dapa_morning_brief.headline_rules import (
     has_acquisition_accountability_topic,
     has_acquisition_fact,
@@ -75,28 +80,22 @@ def classify_title(
         or is_incidental_civic_agenda(title, description)
     ):
         return None
-    service_policy = _contains_any(title, SOLDIER_SERVICE_ALIASES) and _contains_any(
-        title,
-        (
-            "조달",
-            "입찰",
-            "계약",
-            "보안 결함",
-            "보안결함",
-            "보안 취약점",
-            "보안취약점",
-            "정보 유출",
-            "정보유출",
-        ),
-    )
-    if service_policy or has_acquisition_accountability_topic(title, description):
+    if (
+        is_soldier_service_procurement(title)
+        or is_domestic_support_contract(title, description)
+        or has_acquisition_accountability_topic(title, description)
+    ):
         return Section.POLICY
+    market_outreach = is_defense_market_outreach(title)
     if is_military_equipment_overview(title) and not (
-        has_acquisition_policy_topic(title) or is_public_procurement_headline(title)
+        has_acquisition_policy_topic(title)
+        or is_public_procurement_headline(title)
+        or market_outreach
     ):
         return Section.WEAPON_SYSTEM
     if (
-        is_overseas_delivery(title, description)
+        market_outreach
+        or is_overseas_delivery(title, description)
         or is_overseas_weapon_use(title)
         or is_foreign_procurement_news(title, f"{title} {description}")
     ):

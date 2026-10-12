@@ -35,10 +35,16 @@ class _ArticleGenreParser(HTMLParser):
         super().__init__()
         self.labels: list[str] = []
         self._header = False
+        self._location_depth = 0
 
     @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
+        if tag == "div":
+            if self._location_depth:
+                self._location_depth += 1
+            elif "location" in (attributes.get("class") or "").split():
+                self._location_depth = 1
         if tag == "meta" and (
             attributes.get("property") or attributes.get("name") or ""
         ).casefold() in {"article:section", "article:section1", "section", "genre"}:
@@ -51,12 +57,14 @@ class _ArticleGenreParser(HTMLParser):
 
     @override
     def handle_endtag(self, tag: str) -> None:
+        if tag == "div" and self._location_depth:
+            self._location_depth -= 1
         if tag == "header":
             self._header = False
 
     @override
     def handle_data(self, data: str) -> None:
-        if self._header:
+        if self._header or self._location_depth:
             self.labels.append(data.strip())
 
 

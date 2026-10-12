@@ -23,12 +23,17 @@ COMPANY_ALIASES: Final[tuple[tuple[str, ...], ...]] = (
 )
 AMBIGUOUS_COMPANY_ALIASES: Final[tuple[str, ...]] = ("LIG",)
 SOLDIER_SERVICE_ALIASES: Final[tuple[str, ...]] = ("장병이음", "장병e음", "장병이(e)음")
+BOUNDARY_SENSITIVE_WEAPON_ALIASES: Final[frozenset[str]] = frozenset(
+    {"천궁", "천마", "천무", "비궁", "보라매"},
+)
 
 
 def contains_keyword(text: str, keyword: str) -> bool:
     """Match Latin identifiers at token boundaries while retaining Korean particles."""
     normalized = text.casefold()
     needle = keyword.casefold()
+    if needle in BOUNDARY_SENSITIVE_WEAPON_ALIASES:
+        return re.search(r"(?<![가-힣])" + re.escape(needle), normalized) is not None
     if re.search(r"[a-z0-9]", needle):
         return (
             re.search(

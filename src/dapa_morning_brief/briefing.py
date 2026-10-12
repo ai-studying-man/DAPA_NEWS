@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import replace
 from typing import TYPE_CHECKING, Final
 
 from dapa_morning_brief.article_exclusions import fiction_exclusion_reason
 from dapa_morning_brief.article_history import canonical_url
+from dapa_morning_brief.article_selection_review import review_selection
 from dapa_morning_brief.models import Article, Briefing, Section
 from dapa_morning_brief.selection_rules import (
     MIN_SUBSTANTIVE_BODY,
@@ -20,8 +20,6 @@ from dapa_morning_brief.story_signals import normalize_title
 from dapa_morning_brief.telegram_format import daily_quote, format_telegram_message
 from dapa_morning_brief.topic_boundaries import (
     is_incidental_civic_agenda,
-    is_overseas_delivery,
-    is_overseas_weapon_use,
 )
 
 if TYPE_CHECKING:
@@ -113,11 +111,13 @@ def build_briefing(
         body = body_by_url.get(article.url, "")
         if article.url in excluded_urls or _is_editorially_excluded(article, body):
             continue
-        if body and (
-            is_overseas_delivery(article.title, body)
-            or is_overseas_weapon_use(article.title, body)
-        ):
-            article = replace(article, section=Section.EXPORT_BUSINESS)
+        review = review_selection(article, body)
+        _LOGGER.debug(
+            "news_selection_review reason=%s title=%s", review.reason, article.title
+        )
+        if review.article is None:
+            continue
+        article = review.article
         duplicate = next(
             (
                 index

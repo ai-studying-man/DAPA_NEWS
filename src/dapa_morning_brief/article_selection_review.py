@@ -90,13 +90,13 @@ def review_selection(article: Article, body: str) -> SelectionReview:
         return SelectionReview(
             replace(article, section=Section.EXPORT_BUSINESS), "overseas_body_reviewed"
         )
+    primary_section = _primary_action_section(article.title, lead)
+    if primary_section is not None:
+        section = primary_section
     if section is None:
         return SelectionReview(
             article, "category_unresolved", ReviewStatus.CATEGORY_UNCERTAIN
         )
-    primary_section = _primary_action_section(article.title, lead)
-    if primary_section is not None:
-        section = primary_section
     correction_evidence = (
         primary_section is not None
         or (
@@ -165,6 +165,25 @@ def _review_relevance(article: Article, body: str) -> SelectionReview | None:
 def _primary_action_section(title: str, lead: str) -> Section | None:
     if is_body_acquisition_accountability(title, lead):
         return Section.POLICY
+    parliamentary_resolution = (
+        contains_any(title, ("국회", "국방위"))
+        and contains_any(title, ("결의안", "규탄결의"))
+        and contains_any(title, ("채택", "의결", "표결", "발의"))
+        and contains_any(lead, ("국방위", "국방부", "장병", "북한", "北"))
+        and contains_any(lead, ("결의안", "규탄결의"))
+    )
+    alliance_policy = (
+        re.match(r"^(?:\[[^\]]+\]\s*)*(?:미국|미|美)\s*국방", title) is not None
+        and contains_any(title, ("주한미군", "한미동맹", "한미 연합"))
+        and contains_any(title, ("준비태세", "복지", "인사", "정책", "전략"))
+        and contains_any(lead, ("주한미군", "한미동맹", "한미 연합"))
+        and contains_any(lead, ("준비태세", "복지", "인사", "정책", "전략"))
+        and not contains_any(
+            title, ("개발", "시험", "양산", "성능개량", "도입", "계약", "조달")
+        )
+    )
+    if parliamentary_resolution or alliance_policy:
+        return Section.GOVERNMENT
     regulatory_action = (
         contains_defense_anchor(title)
         and contains_any(title, ("미허가", "위반", "불법", "안전점검", "안전 점검"))

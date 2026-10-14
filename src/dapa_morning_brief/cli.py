@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 from dapa_morning_brief.article_content import (
     fetch_article_bodies,
 )
-from dapa_morning_brief.article_history import ArticleHistory
+from dapa_morning_brief.article_history import ArticleHistory, hydrate_recent_history
 from dapa_morning_brief.briefing import (
     format_telegram_message,
 )
@@ -100,6 +100,9 @@ def _prepare_brief(
     raw_path = os.getenv("DAPA_HISTORY_PATH")
     history_path = Path(raw_path) if raw_path else None
     history = ArticleHistory.load(history_path) if history_path else ArticleHistory()
+    history = hydrate_recent_history(
+        history, today=today, fetch_bodies=fetch_article_bodies
+    )
     days = args.days
     max_per_section = args.max_per_section
     selection = CandidateSelection(today, max_per_section, fetch_article_bodies)
@@ -127,6 +130,7 @@ def _prepare_brief(
         selection.inspect(
             history.exclude_recent(candidates, today=today),
             days=window_days,
+            history=history,
         )
     briefing = selection.briefing
     article_bodies = selection.bodies
@@ -194,7 +198,9 @@ def _prepare_brief(
     )
     if history_path is not None and not args.dry_run:
         history.record(
-            chain.from_iterable(briefing.sections.values()), today=today
+            chain.from_iterable(briefing.sections.values()),
+            today=today,
+            bodies=article_bodies,
         ).save(
             history_path,
         )

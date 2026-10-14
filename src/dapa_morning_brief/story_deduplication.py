@@ -13,6 +13,10 @@ from dapa_morning_brief.anchored_event_evidence import (
 from dapa_morning_brief.appointment_evidence import compare_appointment_leads
 from dapa_morning_brief.article_history import canonical_url
 from dapa_morning_brief.body_similarity import has_substantial_body, have_similar_bodies
+from dapa_morning_brief.dated_agreement_evidence import (
+    agreement_evidence,
+    same_agreement,
+)
 from dapa_morning_brief.event_evidence import (
     have_concordant_event_leads,
     have_conflicting_quantities,
@@ -197,7 +201,10 @@ def are_same_articles(
                 left_body and right_body and have_similar_bodies(left_body, right_body)
             )
         )
-    if have_near_identical_headlines(left.title, right.title):
+    if have_near_identical_headlines(left.title, right.title) or same_agreement(
+        agreement_evidence(left.title, left_body, left.published_at),
+        agreement_evidence(right.title, right_body, right.published_at),
+    ):
         return True
     if has_substantial_body(left_body) and has_substantial_body(right_body):
         return have_similar_bodies(left_body, right_body) or (

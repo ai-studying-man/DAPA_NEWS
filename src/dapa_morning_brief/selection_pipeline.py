@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import chain
-from typing import TYPE_CHECKING, Protocol, final
+from typing import TYPE_CHECKING, final
 
 from typing_extensions import override
 
@@ -26,17 +26,9 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
     from datetime import date
 
+    from dapa_morning_brief.article_history import ArticleHistory
+    from dapa_morning_brief.body_fetcher import BodyFetcher
     from dapa_morning_brief.copilot_summary import ArticleBody
-
-
-class BodyFetcher(Protocol):
-    """The existing article-body inspection boundary."""
-
-    def __call__(
-        self, briefing: Briefing, *, include_government: bool
-    ) -> tuple[ArticleBody, ...]:
-        """Fetch news bodies for a bounded candidate batch."""
-        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,7 +67,13 @@ class CandidateSelection:
         """Return previously fetched bodies without another network request."""
         return tuple(self._bodies.values())
 
-    def inspect(self, articles: Iterable[Article], *, days: int) -> None:
+    def inspect(
+        self,
+        articles: Iterable[Article],
+        *,
+        days: int,
+        history: ArticleHistory | None = None,
+    ) -> None:
         """Advance beyond rejected or duplicate batches until candidates exhaust."""
         remaining: tuple[Article, ...] = tuple(
             article
@@ -117,8 +115,14 @@ class CandidateSelection:
             )
             for body in self._fetch_bodies(batch, include_government=True):
                 self._bodies[body.article_url] = body
+            eligible = tuple(self._articles.values())
+            if history is not None:
+                eligible = history.exclude_recent(
+                    eligible, today=self._today, bodies=self.bodies
+                )
+            trace_candidates("history_checked", eligible)
             self.briefing = build_briefing(
-                self._articles.values(),
+                eligible,
                 max_per_section=self._limit,
                 article_bodies=self.bodies,
             )

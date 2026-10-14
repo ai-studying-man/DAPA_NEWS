@@ -4,17 +4,25 @@ from __future__ import annotations
 
 import re
 import tempfile
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from pydantic import BaseModel, ConfigDict
 
+from dapa_morning_brief.dated_agreement_evidence import (
+    AgreementEvidence,
+    agreement_evidence,
+    same_agreement,
+)
+from dapa_morning_brief.models import Article, Briefing, Section
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from dapa_morning_brief.models import Article
+    from dapa_morning_brief.body_fetcher import BodyFetcher
+    from dapa_morning_brief.copilot_summary import ArticleBody
 
 
 class HistoryEntry(BaseModel):
@@ -25,6 +33,7 @@ class HistoryEntry(BaseModel):
     collected_on: date
     url: str
     title: str
+    event: AgreementEvidence | None = None
 
 
 class ArticleHistory(BaseModel):
@@ -46,6 +55,7 @@ class ArticleHistory(BaseModel):
         articles: Iterable[Article],
         *,
         today: date,
+        bodies: tuple[ArticleBody, ...] = (),
     ) -> tuple[Article, ...]:
         """Exclude identities collected on either of the previous two days."""
         recent = tuple(
@@ -55,14 +65,38 @@ class ArticleHistory(BaseModel):
         )
         urls = {entry.url for entry in recent}
         titles = {entry.title for entry in recent}
+        events = tuple(
+            entry.event
+            for entry in self.entries
+            if today - timedelta(days=7) <= entry.collected_on < today
+            and entry.event is not None
+        )
+        body_by_url = {body.article_url: body.body for body in bodies}
         return tuple(
             article
             for article in articles
             if canonical_url(article.url) not in urls
             and normalized_title(article.title) not in titles
+            and not any(
+                same_agreement(
+                    event,
+                    agreement_evidence(
+                        article.title,
+                        body_by_url.get(article.url, ""),
+                        article.published_at,
+                    ),
+                )
+                for event in events
+            )
         )
 
-    def record(self, articles: Iterable[Article], *, today: date) -> ArticleHistory:
+    def record(
+        self,
+        articles: Iterable[Article],
+        *,
+        today: date,
+        bodies: tuple[ArticleBody, ...] = (),
+    ) -> ArticleHistory:
         """Retain seven days and record each day's collection once per identity."""
         entries = [
             entry
@@ -71,12 +105,24 @@ class ArticleHistory(BaseModel):
         ]
         known_urls = {entry.url for entry in entries if entry.collected_on == today}
         known_titles = {entry.title for entry in entries if entry.collected_on == today}
+        body_by_url = {body.article_url: body.body for body in bodies}
         for article in articles:
             url = canonical_url(article.url)
             title = normalized_title(article.title)
             if url in known_urls or title in known_titles:
                 continue
-            entries.append(HistoryEntry(collected_on=today, url=url, title=title))
+            entries.append(
+                HistoryEntry(
+                    collected_on=today,
+                    url=url,
+                    title=title,
+                    event=agreement_evidence(
+                        article.title,
+                        body_by_url.get(article.url, ""),
+                        article.published_at,
+                    ),
+                )
+            )
             known_urls.add(url)
             known_titles.add(title)
         return ArticleHistory(entries=tuple(entries))
@@ -115,3 +161,57 @@ def canonical_url(url: str) -> str:
 def normalized_title(title: str) -> str:
     """Match exact titles across punctuation and whitespace variants."""
     return re.sub(r"[\W_]+", "", title.casefold())
+
+
+def hydrate_recent_history(
+    history: ArticleHistory, *, today: date, fetch_bodies: BodyFetcher
+) -> ArticleHistory:
+    """Read legacy agreement originals; collection dates are publication proxies."""
+    pending = tuple(
+        entry
+        for entry in history.entries
+        if entry.event is None
+        and today - timedelta(days=7) <= entry.collected_on < today
+        and any(
+            marker in entry.title.casefold()
+            for marker in (
+                "mou",
+                "협약",
+                "협정",
+                "자매결연",
+                "개발협력",
+                "현지화협력",
+            )
+        )
+    )
+    if not pending:
+        return history
+    articles = tuple(
+        Article(
+            title=entry.title,
+            url=f"https://{entry.url}",
+            published_at=datetime.combine(entry.collected_on, time(), UTC),
+            source="history",
+            section=Section.POLICY,
+        )
+        for entry in pending
+    )
+    bodies = fetch_bodies(
+        Briefing(sections={Section.POLICY: articles}), include_government=True
+    )
+    evidence = {
+        canonical_url(body.article_url): agreement_evidence(
+            body.title, body.body, article.published_at
+        )
+        for article in articles
+        for body in bodies
+        if body.article_url == article.url and not body.exclusion_reason
+    }
+    return ArticleHistory(
+        entries=tuple(
+            entry.model_copy(update={"event": evidence[entry.url]})
+            if entry.url in evidence
+            else entry
+            for entry in history.entries
+        )
+    )

@@ -73,6 +73,8 @@ WEAPON_SEARCH_TERMS: Final[tuple[str, ...]] = (
     "한국 호위함",
     "전투원용 무전기",
     "전술 무전기",
+    "TMMR",
+    "전술 다대역 다기능 무전기",
     *(
         f"{alias} {entry.context[0]}" if entry.context else alias
         for entry in WEAPON_CATALOG

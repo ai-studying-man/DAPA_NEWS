@@ -58,6 +58,7 @@ class Article:
     feed_rank: int | None = None
     search_provider: str = ""
     matched_queries: tuple[str, ...] = ()
+    requires_body_review: bool = False
 
 
 @dataclass(frozen=True, slots=True)

@@ -17,6 +17,7 @@ from dapa_morning_brief.article_exclusions import (
     fiction_exclusion_reason,
     is_excluded_publisher,
 )
+from dapa_morning_brief.body_relevance import equipment_review_section
 from dapa_morning_brief.models import Article, Section
 from dapa_morning_brief.rss_metadata import (
     _clean_description,
@@ -88,21 +89,26 @@ def parse_rss_items(
         if published_at < cutoff:
             _trace_decision("stale", title, published_at)
             continue
-        if not is_relevant_article(title, description, source):
-            _trace_decision("irrelevant", title, published_at)
-            continue
         metadata_text = f"{title} {description}".casefold()
-        if default_section is Section.GOVERNMENT and not is_current_government_news(
-            metadata_text,
-            title,
-            source,
-        ):
+        requires_body_review = not is_relevant_article(title, description, source) or (
+            default_section is Section.GOVERNMENT
+            and not is_current_government_news(metadata_text, title, source)
+        )
+        provisional = equipment_review_section(title, description, source)
+        if requires_body_review and provisional is None:
             _trace_decision("irrelevant", title, published_at)
             continue
-        section = default_section or classify_title(
-            title,
-            description=description,
-            source=source,
+        section = (
+            provisional
+            if requires_body_review
+            else (
+                default_section
+                or classify_title(
+                    title,
+                    description=description,
+                    source=source,
+                )
+            )
         )
         if section is None:
             _trace_decision("unclassified", title, published_at)
@@ -116,13 +122,18 @@ def parse_rss_items(
             description=description,
             view_count=_view_count_from_item(item),
             feed_rank=feed_rank,
+            requires_body_review=requires_body_review,
         )
         exclusion_reason = fiction_exclusion_reason(article, "")
         if exclusion_reason is not None:
             _trace_decision(exclusion_reason, title, published_at)
             continue
         articles.append(article)
-        _trace_decision("accepted", title, published_at)
+        _trace_decision(
+            "body_review_required" if requires_body_review else "accepted",
+            title,
+            published_at,
+        )
 
     return articles
 

@@ -16,6 +16,10 @@ from dapa_morning_brief.article_scope import (
     KOREAN_OFFICIAL_SOURCE_KEYWORDS,
     STRONG_KOREAN_SCOPE_KEYWORDS,
 )
+from dapa_morning_brief.body_relevance import (
+    confirmed_equipment_section,
+    is_body_acquisition_accountability,
+)
 from dapa_morning_brief.business_rules import contains_defense_anchor
 from dapa_morning_brief.entity_catalog import contains_any
 from dapa_morning_brief.headline_action_rules import (
@@ -71,7 +75,9 @@ def review_selection(article: Article, body: str) -> SelectionReview:
     """Revisit category using the headline and lead, never the article's tail."""
     if not body.strip():
         return SelectionReview(
-            article, "body_unavailable", ReviewStatus.BODY_UNAVAILABLE
+            None if article.requires_body_review else article,
+            "body_unavailable",
+            ReviewStatus.BODY_UNAVAILABLE,
         )
     relevance = _review_relevance(article, body)
     if relevance is not None:
@@ -135,6 +141,16 @@ def _review_relevance(article: Article, body: str) -> SelectionReview | None:
     )
     if civilian_primary_topic:
         return SelectionReview(None, "body_review_unrelated", ReviewStatus.UNRELATED)
+    if article.requires_body_review:
+        section = confirmed_equipment_section(article, body)
+        if section is None:
+            return SelectionReview(
+                None, "body_review_insufficient", ReviewStatus.RELEVANCE_UNCERTAIN
+            )
+        return SelectionReview(
+            replace(article, section=section, requires_body_review=False),
+            "body_relevance_confirmed",
+        )
     if (
         article.search_provider
         and not headline_defense_identity
@@ -147,6 +163,8 @@ def _review_relevance(article: Article, body: str) -> SelectionReview | None:
 
 
 def _primary_action_section(title: str, lead: str) -> Section | None:
+    if is_body_acquisition_accountability(title, lead):
+        return Section.POLICY
     regulatory_action = (
         contains_defense_anchor(title)
         and contains_any(title, ("미허가", "위반", "불법", "안전점검", "안전 점검"))
